@@ -31,7 +31,7 @@ TZ = ZoneInfo("America/Chicago")
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
 SITE = ROOT / "site"
-MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-terra")
+MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5")
 TITLE = "First Light: World Report"
 
 ET.register_namespace("itunes", "http://www.itunes.com/dtds/podcast-1.0.dtd")
