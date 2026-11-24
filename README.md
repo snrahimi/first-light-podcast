@@ -1,4 +1,11 @@
-# First Light: World Report 🎙️ | Version 2
+# First Light: World Report 🎙️ | Version 3
+
+> **Newsroom 3.0:** Source expansion, per-story research dossiers, exact
+> claim-to-source evidence ledgers and a safer Gemini scriptwriter are implemented.
+> See the [Newsroom 3.0 roadmap and limitations](NEWSROOM3_ROADMAP.md).
+> This is an AI-assisted source-attributed briefing, NOT a staffed newsroom
+> or a guarantee of independently fact-checked news. GDELT is discovery-only.
+
 
 **The world. Before your day.** A 5–7-minute, ad-free, AI-assisted morning
 news briefing with important global events, concise business/science/technology
@@ -36,6 +43,15 @@ scheduled services are available.
   *topic-level* leads for human verification, not article-level fact checks.
 - Treat single-source claims as attributed reporting. The Gemini script prompt
   forbids unsourced context, invented market data, quotes or speculative causes.
+- Newsroom 3.0 also scans NASA and BLS official release feeds and CISA's
+  exploited-vulnerabilities catalog when available. GDELT discovers global
+  links only; it is never used as broadcast-ready evidence.
+- The evidence ledger ties individual *source excerpts* to URLs. It does not
+  independently prove the truth of what a publisher reported. The public
+  **evidence.json** file and GitHub Release evidence asset expose this audit.
+- Gemini scripts can get one bounded evidence-constrained rewrite if a draft
+  is too short; unsupported numeric claims fail automated script review.
+  Additional Gemini calls consume API quota and may cost money on paid tiers.
 - The previous seven days of published topic metadata are read from GitHub
   Release notes. Repeated headlines are deprioritized or skipped; possible
   follow-ups include the previous headline/date, but must not be characterized
