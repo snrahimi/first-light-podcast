@@ -61,6 +61,18 @@ class EditorialTests(unittest.TestCase):
         self.assertGreaterEqual(len(doubles), 1)
         self.assertEqual(len(doubles[0]["publishers"]), 2)
 
+    def test_evidence_depth_only_modestly_affects_newsworthiness(self):
+        groups = standard_groups()
+        groups["world"][0]["summary"] = (
+            "Government representatives held diplomatic meetings and "
+            "discussed further negotiations, according to the publisher.")
+        edition = editorial.curate(groups, [], self.now)
+        leads = edition["rundown"]["Top world headlines"]
+        self.assertTrue(leads)
+        self.assertIn("ranking_bonus", leads[0]["evidence_depth"])
+        self.assertLessEqual(leads[0]["evidence_depth"]["ranking_bonus"], 10)
+        self.assertFalse(leads[0]["evidence_depth"]["independently_verified"])
+
     def test_prior_episode_metadata_round_trip(self):
         edition = editorial.curate(standard_groups(), [], self.now)
         note = editorial.memory_note(edition)

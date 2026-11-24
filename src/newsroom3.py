@@ -286,6 +286,23 @@ def build_dossiers(edition, gdelt_leads):
                 "previous_coverage": story.get("previous_headline"),
                 "previous_date": story.get("previous_date"),
                 "source_count": len({x["publisher"] for x in sources}),
+                "evidence_depth": story.get("evidence_depth", {}),
+                "freshness": {
+                    "reported_publication": story.get("published"),
+                    "prior_edition_coverage": story.get("coverage_status"),
+                    "background_is_not_new_reporting": True,
+                },
+                "editorial_review": {
+                    "sensitive_claims_present": bool(
+                        editorial.key_tokens(story["title"]) & set((
+                            "killed", "deaths", "casualties", "election",
+                            "outbreak", "bombing", "evacuation",
+                            "assassination", "genocide", "hostages"
+                        ))
+                    ),
+                    "human_fact_check_completed": False,
+                    "automation_cannot_verify_truth": True,
+                },
                 "sources": sources,
                 "claim_ledger": claims[:6],
                 "verified_facts": [],  # None without an independent check.
@@ -419,6 +436,9 @@ def writer_material(dossiers):
         section: [{
             "headline": item["headline"],
             "source_status": item["source_status"],
+            "evidence_depth": item.get("evidence_depth", {}),
+            "freshness": item.get("freshness", {}),
+            "editorial_review": item.get("editorial_review", {}),
             "evidence": [{
                 "publisher": c["publisher"], "text": c["claim"],
                 "url": c["source_url"], "published": c.get("published"),

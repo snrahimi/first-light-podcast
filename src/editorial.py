@@ -194,6 +194,26 @@ def _rank(cluster, history):
     score += round(18 * (1 - age / 42))
     score += min(len(cluster["publishers"]) - 1, 2) * 8
     score += min(len(key_tokens(published["title"]) & IMPACT_WORDS), 2) * 7
+    # Evidence depth is only a modest tiebreaker. High-impact urgent
+    # breaking stories must not be excluded because reporting is sparse.
+    distinct_excerpts = {
+        (report.get("publisher"), str(report.get("summary", "")).strip())
+        for report in cluster["reports"] if len(
+            str(report.get("summary") or "").strip()) >= 45
+    }
+    official_statements = sum(
+        str(report.get("provenance", "")).startswith("primary_")
+        for report in cluster["reports"]
+    )
+    depth = min(10, len(distinct_excerpts) * 2 + official_statements * 3)
+    cluster["evidence_depth"] = {
+        "source_publishers": len(cluster["publishers"]),
+        "substantive_feed_summaries": len(distinct_excerpts),
+        "official_statements": official_statements,
+        "ranking_bonus": depth,
+        "independently_verified": False,
+    }
+    score += depth
     score += 5 if cluster["region"] != "other" else 0
     if status == "repeat":
         score -= 50
@@ -291,6 +311,7 @@ def curate(groups, history, now):
                     item["previous"].get("date") if item["previous"] else None
                 ),
                 "score": item["score"],
+                "evidence_depth": item["evidence_depth"],
                 "region": item["region"],
             }
             for item in matches

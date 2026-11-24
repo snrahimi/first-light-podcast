@@ -201,6 +201,31 @@ def _trusted_feed_candidate(entry):
     return False
 
 
+def _topic_match_score(headline, candidate_title, candidate_summary=""):
+    """Conservative same-event signal; not factual corroboration.
+
+    High overlap is accepted. A second path handles shorter paraphrased
+    headlines only when a concrete event word and another subject token
+    overlap, plus supporting summary overlap. A country alone is never
+    sufficient to link different events.
+    """
+    lead = editorial.key_tokens(headline)
+    subject = editorial.key_tokens(candidate_title)
+    overlap = lead & subject
+    base = editorial.story_similarity(headline, candidate_title)
+    if len(overlap) >= 4 and base >= 0.65:
+        return base
+    event_overlap = overlap & editorial.IMPACT_WORDS
+    summary_tokens = editorial.key_tokens(candidate_summary) if candidate_summary else set()
+    shared_context = lead & summary_tokens
+    fraction = len(overlap) / max(1, min(len(lead), len(subject)))
+    if (len(overlap) >= 2 and event_overlap and fraction >= 0.35
+            and len(overlap | shared_context) >= 3
+            and (shared_context or len(overlap) >= 3)):
+        return min(0.85, 0.35 + 0.12 * len(overlap) + 0.05 * len(shared_context))
+    return 0.0
+
+
 def link_selected_feed_context(dossiers, groups):
     """Enrich SELECTED stories with short, directly linked feed statements.
 
@@ -232,13 +257,12 @@ def link_selected_feed_context(dossiers, groups):
                     continue
                 if not _trusted_feed_candidate(candidate):
                     continue
-                a = editorial.key_tokens(dossier["headline"])
-                b = editorial.key_tokens(title)
-                common = len(a & b)
-                score = editorial.story_similarity(dossier["headline"], title)
-                # Strong literal topic overlap; e.g. two reports on Ukraine
-                # alone must not be treated as reports on the same event.
-                if common < 4 or score < 0.70:
+                score = _topic_match_score(
+                    dossier["headline"], title, candidate.get("summary", "")
+                )
+                # A shared country or organization is not proof of the same
+                # event. Match must include enough concrete event context.
+                if score <= 0:
                     continue
                 matching.append((score, candidate))
             matching.sort(
