@@ -27,10 +27,11 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3
+    from . import editorial, newsroom3, research33
 else:
     import editorial
     import newsroom3
+    import research33
 import base64
 import io
 import wave
@@ -497,7 +498,11 @@ def optional_gemini_script(now, edition, weather, dossiers=None):
         LOG.info("No Gemini script key; using sourced no-API fallback.")
         return None
     # Only public RSS headline metadata and weather are sent. Nothing personal.
-    material = newsroom3.writer_material(dossiers) if dossiers is not None else edition["rundown"]
+    material = (
+        research33.enrich_writer_material(
+            dossiers, newsroom3.writer_material(dossiers)
+        ) if dossiers is not None else edition["rundown"]
+    )
     prompt = f"""You are the lead editor of First Light: World Report, a tight and
 trustworthy DAILY MORNING AUDIO NEWS PODCAST for San Antonio.
 
@@ -658,6 +663,8 @@ def news_and_script(_client, now, weather):
     edition = editorial.curate(groups, recent, now)
     dossiers = newsroom3.build_dossiers(edition, leads)
     evidence_metrics = newsroom3.validate_dossiers(dossiers)
+    research33.enrich_dossiers(dossiers)
+    research_metrics = research33.validate_research(dossiers)
     script = optional_gemini_script(now, edition, weather, dossiers)
     mode = "Gemini evidence-guided brief" if script else "source-attributed RSS fallback"
     if script is None:
@@ -680,6 +687,7 @@ def news_and_script(_client, now, weather):
     edition["newsroom3_audit"] = newsroom3.audit_export(
         dossiers, evidence_metrics, leads
     )
+    edition["newsroom3_audit"]["phase33_research"] = research_metrics
     LOG.info(
         "Newsroom 3.0: %d curated stories, %d exact attributed claims, "
         "%d official feed items, %d discovery leads (not used as facts), "
@@ -691,6 +699,7 @@ def news_and_script(_client, now, weather):
     notes = (
         editorial.source_notes(edition) + "\n\n"
         + newsroom3.audit_notes(dossiers, evidence_metrics)
+        + "\n\n" + research33.research_notes(dossiers, research_metrics)
     )
     return notes, editorial.edition_sources(edition), script, edition
 
