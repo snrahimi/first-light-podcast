@@ -321,7 +321,8 @@ class PodcastTests(unittest.TestCase):
              patch("src.first_light.editorial.load_history", return_value=[]), \
              patch("src.first_light.newsroom3.collect_source_expansion", \
                    return_value=({section: [] for section in editorial_groups()}, [])), \
-             patch("src.first_light.optional_gemini_script", return_value=None):
+             patch("src.first_light.broadcast32.generated_script",
+                   return_value=(None, {"reason": "offline_test", "provider_calls": 0})):
             notes, sources, script, edition = news_and_script(None, now, weather)
         self.assertGreaterEqual(edition["count"], 5)
         self.assertLessEqual(edition["count"], 8)
@@ -360,6 +361,31 @@ class PodcastTests(unittest.TestCase):
         self.assertIn("around 67 degrees", script)
         self.assertIn("high is near 52", script)
         self.assertIn("low is near 48", script)
+
+    def test_segmented_writer_unsourced_number_triggers_safe_fallback(self):
+        from tests_support import editorial_groups
+        now = datetime(2026, 11, 23, 5, 0,
+                       tzinfo=ZoneInfo("America/Chicago"))
+        weather = {"source": "unavailable",
+                   "nws_alert_check": "not verified", "nws_active_alerts": []}
+        fake = (
+            "Good morning San Antonio. This is First Light: World Report "
+            "in 2026 with AI assistance. "
+            + "The international briefing gives unsupported 99999 casualties. " * 95
+        )
+        with patch.dict(os.environ, {
+            "GH_TOKEN": "test", "GITHUB_REPOSITORY": "a/b"
+        }), patch("src.first_light.rss_news",
+                  return_value=editorial_groups()), patch(
+            "src.first_light.editorial.load_history", return_value=[]
+        ), patch(
+            "src.first_light.newsroom3.collect_source_expansion",
+            return_value=({section: [] for section in editorial_groups()}, [])
+        ), patch("src.first_light.broadcast32.generated_script",
+                 return_value=(fake, {"provider_calls": 2})):
+            _, _, script, edition = news_and_script(None, now, weather)
+        self.assertIn("fallback", edition["script_mode"])
+        self.assertNotIn("99999", script)
 
     def test_audio_probe_detects_short_and_invalid_mp3(self):
         valid = {"format": {"duration": "360.0", "bit_rate": "192000"},
