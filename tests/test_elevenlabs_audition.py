@@ -26,7 +26,7 @@ class ElevenLabsAuditionTests(unittest.TestCase):
 
     def test_excess_length_fails_before_api_call(self):
         with self.assertRaisesRegex(ValueError, "820-character"):
-            voice.audition_payload("This is a sample sentence. " * 50)
+            voice.audition_payload(("international " * 100).strip())
         with self.assertRaisesRegex(ValueError, "90-160-word"):
             voice.audition_payload("This is much too short.")
 
