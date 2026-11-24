@@ -446,7 +446,9 @@ def early_weather_alert_intro(weather):
     for entry in alerts:
         alert = re.sub(r"\s+", " ", str(entry)).strip()
         if any(word in alert.lower() for word in SEVERE_LOCAL_ALERT_NAMES):
-            alert = alert[:170].rsplit(" ", 1)[0].rstrip(".,;:")
+            if len(alert) > 170:
+                alert = alert[:170].rsplit(" ", 1)[0]
+            alert = alert.rstrip(".,;:")
             return (
                 "Before the world news, an important local weather notice. "
                 "The National Weather Service lists an active alert: "
