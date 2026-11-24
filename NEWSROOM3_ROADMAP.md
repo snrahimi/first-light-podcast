@@ -1,3 +1,5 @@
+> **Package 2+ roadmap:** See [PACKAGE2PLUS_ROADMAP.md](PACKAGE2PLUS_ROADMAP.md) for the full 53-capability implementation ledger, status of each feature, acceptance criteria and recommended future work.
+
 # First Light: Newsroom 3.0 (Phases 3A, 3B, 3C, 3D)
 
 **Status:** Implemented on branch; a passing GitHub CI workflow verifies code
