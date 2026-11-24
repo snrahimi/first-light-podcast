@@ -332,3 +332,27 @@ still publish when the supplied sources are too thin.
 
 See [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing)
 and [rate-limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits).
+
+
+## Package 2+.6: stronger source-backed story development
+
+The producer retains longer *short RSS summaries* and can capture more
+distinct, headline-anchored excerpts from selected allowlisted issuing-agency
+pages. It may link a few additional **same-event** source-feed reports
+from already trusted RSS sources. It does **not** scrape news article bodies
+or independently verify publisher claims. Publisher text remains source
+material to paraphrase, not wording to copy verbatim.
+
+The two existing Gemini writing sections now receive evidence-weighted
+story budgets and explicit instructions to explain distinct supported
+details rather than simply reading headlines. Under-delivery below 65%
+of an evidence-backed advisory section budget is flagged in public
+editorial QA, with **no extra writing requests**. The observed 5–7 minute
+target may still be missed when supporting evidence is too sparse.
+
+World leads now use a soft publisher-diversity tie-breaker. Economic
+policy and international macroeconomic developments get a modest ranking
+bonus. Neither heuristic replaces human news judgment.
+
+Full scope, acceptance limits, and remaining gaps:
+[Package 2+ roadmap](PACKAGE2PLUS_ROADMAP.md).
