@@ -13,7 +13,7 @@ Automated 5–7-minute morning world news, business, science, technology and San
 5. Choose New repository secret. Enter the exact name GEMINI_API_KEY and paste your key into the secret value. Save.
 6. Never paste the key into chat, Issues, README files, public code, or GitHub Variables.
 
-The workflow uses model gemini-2.5-flash-lite by default and prompts for approximately 760–890 spoken words. It passes only public RSS headline/summary text and public weather data to Gemini. No private information is sent.
+The workflow uses the newer `gemini-3.5-flash-lite` by default, and tries `gemini-3.1-flash-lite` when the selected model is unavailable (HTTP 404). Older Gemini 2.5 models can return HTTP 404 for newly created API projects. The workflow and prompts for approximately 760–890 spoken words. It passes only public RSS headline/summary text and public weather data to Gemini. No private information is sent.
 
 If Gemini quota is exhausted, the model is unavailable, or the key is absent, a simpler, attributed, no-API script is used automatically. The fallback is less polished and might be shorter than 5 minutes. The spoken episode still uses free local narration.
 
