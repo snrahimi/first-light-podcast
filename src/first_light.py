@@ -1185,6 +1185,42 @@ def run_gh(*args, check=True):
     return subprocess.run(["gh", *args], text=True, capture_output=True, check=check)
 
 
+def release_revision_notes(previous_body, *, now=None):
+    """Explicitly disclose regenerated same-date episodes.
+
+    Release tags retain only their latest MP3. Revision history records
+    the replacement event but cannot recover an older overwritten asset.
+    Human corrections must still be documented and reviewed separately.
+    """
+    stamp = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    marker = re.search(
+        r"<!-- FIRST_LIGHT_REVISION_V1:(\d{1,4}) -->",
+        previous_body or "",
+    )
+    revision = min(9999, int(marker.group(1)) + 1) if marker else 2
+    lines = re.findall(
+        r"(?m)^- Revision \d{1,4}: [^\n]{1,170}$",
+        previous_body or "",
+    )[-25:]
+    if not lines:
+        lines = [
+            "- Revision 1: An earlier published version existed; its original "
+            "audio may no longer be accessible."
+        ]
+    lines.append(
+        f"- Revision {revision}: Automated same-date regeneration at "
+        f"{stamp}. Audio/transcript assets were replaced; no human-reviewed "
+        "correction is implied."
+    )
+    return (
+        "\n\n### Release revision history\n"
+        + "\n".join(lines)
+        + f"\n<!-- FIRST_LIGHT_REVISION_V1:{revision} -->\n"
+        + "Correction requests and editorial standards: "
+        "https://github.com/snrahimi/first-light-podcast/blob/main/CORRECTIONS.md\n"
+    )
+
+
 def publish_release(day, mp3, transcript, notes, audit=None):
     tag = "first-light-" + day
     title = f"{TITLE} | {day}"
@@ -1192,9 +1228,27 @@ def publish_release(day, mp3, transcript, notes, audit=None):
     if audit is not None:
         assets.append(str(audit))
     if run_gh("release", "view", tag, check=False).returncode == 0:
+        old = run_gh(
+            "release", "view", tag, "--json", "body", "--jq", ".body",
+            check=False,
+        )
+        if old.returncode != 0:
+            raise RuntimeError("Cannot read prior release notes for revision audit")
+        with Path(notes).open("a", encoding="utf-8") as file:
+            file.write(release_revision_notes(old.stdout))
+        LOG.warning(
+            "Existing daily release will be regenerated with explicit "
+            "revision history. Older audio assets are not archived."
+        )
         run_gh("release", "upload", tag, *assets, "--clobber")
         run_gh("release", "edit", tag, "--title", title, "--notes-file", str(notes))
     else:
+        with Path(notes).open("a", encoding="utf-8") as file:
+            file.write(
+                "\n\n### Release revision history\n"
+                "- Revision 1: Initial publication.\n"
+                "<!-- FIRST_LIGHT_REVISION_V1:1 -->\n"
+            )
         run_gh("release", "create", tag, *assets,
                "--title", title, "--notes-file", str(notes), "--latest")
 
