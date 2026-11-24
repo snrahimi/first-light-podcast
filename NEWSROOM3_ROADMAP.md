@@ -143,13 +143,27 @@ Observed baseline prior to the changes: 657-word Charon narration took about 242
 
 Human verification, licensed independent full-text investigations, and editorial sign-off are **not** supplied by this system. This remains an AI-assisted attributed morning briefing with published provenance and corrections.
 
+## Live acceptance result: November 24, 2026 (UTC)
+
+[Full production workflow](https://github.com/snrahimi/first-light-podcast/actions/runs/45330983846) ran on main with actual feeds, Google text generation, Gemini Charon speech, GitHub Release publication and GitHub Pages deployment. The workflow completed successfully.
+
+- **Audio:** Gemini Charon, two of two narration segments, measured duration 252 seconds (4:12), MP3 ~192 kbps. This was an acceptable technical release but **not** within our 5–7-minute editorial objective.
+- **Script:** Source-attributed deterministic fallback, 629 words. The first Phase 3.2 Gemini world section failed its acceptance gate; it therefore did not get an on-air two-part segmented script on this run.
+- **Discovery:** 18 official feed items, zero GDELT discovery leads (optional service timed out). BLS feed was unavailable. The selected story audit contained 16 attributed claim snippets, not independently verified facts.
+- **Deeper context:** 0 official webpages successfully inspected from chosen story URLs. The Phase 3.3 feature is implemented but its extra-document benefit was not demonstrated in this run.
+- **Publication:** GitHub Release, evidence JSON, transcript, podcast RSS and GitHub Pages deployment completed.
+
+[Follow-up PR #7](https://github.com/snrahimi/first-light-podcast/pull/7) adds safe section-word diagnostics, accepts genuinely useful shorter drafts when the complete evidence and broadcast quality gates pass, and reports how many agency document fetches were attempted. It passed offline tests but **has not yet passed a new live episode test**.
+
+These distinctions matter: an end-to-end production success is not the same thing as reaching the editorial duration, independent verification, or research-enrichment goals. None of those gaps should be disguised by filler.
+
 ## Roadmap after Newsroom 3.0
 
 | Milestone | Status | Next acceptance checkpoint |
 |---|---|---|
 | 3.1 Charon-only reliability | Code completed, one successful Charon baseline broadcast | Confirm quota headroom and ≥95% on-time delivery across 30 days |
-| 3.3 Deeper official-source context | Implemented in PR #5 with offline CI | Verify live UN/NASA/BLS excerpts are correctly attributed; assess source gaps; add human fact-review procedure |
-| 3.2 Segmented broadcast writing | Implemented in PR #6 with offline CI | Run full live workflow; inspect spoken script, accuracy, 5–7-minute duration, Charon voice and source audit |
+| 3.3 Deeper official-source context | Implemented, live page enrichment not yet successful | Diagnose zero additional agency pages; expand legally usable documents; add a human fact-review procedure |
+| 3.2 Segmented broadcast writing | Implemented, latest live episode used fallback | Validate the #7 fixes with a fresh run; achieve evidence-supported 5–7-minute scripts without repetitive filler |
 | 3.4 Quality operations | Planned | Automatic missed-episode alert, measured duration trends, pronunciation review and correction tracking |
 | 4.0 Listening experience | Planned | Mobile-first website, searchable archive, accessible player and source-linked transcripts |
 | 4.1 Podcast distribution | Planned | Validate audio byte-range and RSS with Apple Podcasts and Spotify |
