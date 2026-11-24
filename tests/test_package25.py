@@ -7,7 +7,21 @@ from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ET
 
 from src import broadcast32, editorial, first_light, newsroom3
-from tests.test_editorial import headline, standard_groups
+from tests_support import editorial_groups
+
+
+def headline(title, category="world", publisher="Outlet A", age=3):
+    from urllib.parse import quote
+    return {
+        "title": title, "category": category, "publisher": publisher,
+        "age": age, "summary": title,
+        "url": "https://example.org/" + quote(title),
+        "published": "2026-11-23T09:30:00+00:00",
+    }
+
+
+def standard_groups():
+    return editorial_groups()
 
 NOW = datetime(2026, 11, 24, 6, tzinfo=ZoneInfo("America/Chicago"))
 
