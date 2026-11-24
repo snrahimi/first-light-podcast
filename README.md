@@ -39,8 +39,14 @@ Add a Daily 5:00 AM personal automation in Apple Shortcuts. Retrieve https://snr
 - Episode archives in GitHub Releases, a podcast RSS feed and website in GitHub Pages.
 - All GitHub Pages and Releases podcast content is **public**, not a private feed.
 
-The old manual ElevenLabs narrator test workflow remains available but is not scheduled. Paid API secrets are not used by the daily workflow; remove them from GitHub if you no longer need them.
+The legacy ElevenLabs voice-test workflow was removed because the active podcast uses only free local voices. The daily workflow never uses paid OpenAI or ElevenLabs APIs; remove those legacy API secrets from GitHub if they are no longer needed.
 
 ## Important limits
 
 Free Gemini quotas/models can change. Free services can throttle or fail. A public news headline feed is not independently fact-checked, and the AI script can contain inaccuracies, so verify consequential reports with the linked original outlets. Publisher terms govern use of their feeds. GitHub Actions public-repository runner usage is normally free within GitHub's current terms, and the repository contents are public.
+
+## Weather service reliability
+
+Open-Meteo requests have bounded connection/read timeouts and retry temporary network failures. If Open-Meteo remains unreachable, the script attempts an official National Weather Service period forecast. If both providers are unavailable, the podcast explicitly says weather could not be verified and does **not** invent temperatures, wind or precipitation. National Weather Service alert checks are separate and can also be unavailable. This allows the episode to continue even if a weather provider is temporarily down.
+
+GitHub Actions were upgraded to Node.js 24-compatible releases for the daily pipeline and source validation.
