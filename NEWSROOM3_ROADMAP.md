@@ -133,17 +133,27 @@ After merging, run a **new** GitHub Actions daily workflow on main and verify:
   verified claim counts unless independently validated evidence exists.
 - GitHub Release assets, RSS and Pages deployment complete successfully.
 
+## Integration update: Phases 3.3 then 3.2
+
+The work was implemented and merged in separate, CI-validated pull requests:
+- [Phase 3.3 research integration](https://github.com/snrahimi/first-light-podcast/pull/5): official UN Press, NASA and BLS source discovery; up to three limited official-page excerpts; exact source checks and cautious cross-outlet comparison. These are **attributed official statements**, NOT independent factual verification. Third-party articles and GDELT leads are not fetched as factual source texts.
+- [Phase 3.2 broadcast composition](https://github.com/snrahimi/first-light-podcast/pull/6): two bounded Gemini text requests with non-overlapping assignments (world news versus business/science/technology), controlled opening, deterministic San Antonio weather and closing; full numeric evidence checks, conservative fallback, and a calibrated 163-words/minute Charon duration estimate.
+
+Observed baseline prior to the changes: 657-word Charon narration took about 242 seconds. The new script target is approximately 925 words (about 5:40 at that measured pace), **only when source evidence supports the content**. The code reports a shorter honest script rather than padding it with imagined context. Audio duration is measured after speech synthesis, not assumed from word count.
+
+Human verification, licensed independent full-text investigations, and editorial sign-off are **not** supplied by this system. This remains an AI-assisted attributed morning briefing with published provenance and corrections.
+
 ## Roadmap after Newsroom 3.0
 
-| Next milestone | Focus | Measurable acceptance |
+| Milestone | Status | Next acceptance checkpoint |
 |---|---|---|
-| 3.1 Charon-only reliability | Reject unapproved voices, space Gemini requests, retry temporary 429/5xx, log sanitized segment failures, verify one new episode | 100% of published episodes use Charon; no silent substitutions |
-| 3.2 Duration and daily availability | Improve source-supported 5–7-minute scripts, alert on missed episode, diagnose free-tier quota, validate publishing by 4:45 AM Central | 30-day delivery ≥95%, audio length 5–7 minutes when evidence supports it |
-| 3.3 Deeper verified context | Contractually permitted full-text/primary records and human-reviewed claim selection | Major explanatory statements traceable to appropriate evidence |
-| 4.0 Listening experience | Beautiful mobile-first site, archives, searchable transcripts, clear source/audit views | 100% episodes have playable audio and source-linked pages |
-| 4.1 Podcast distribution | Check byte-range audio and validate feed for Apple/Spotify | Submission passes platform requirements |
-| 5.0 Listener personalization | Optional city, topics and lengths, without sacrificing basic world coverage | Settings work without collecting unnecessary personal data |
-| 6.0 Growth | Real listener feedback, subscriptions, privacy-conscious stats | Measure retention and corrections without inflated claims |
+| 3.1 Charon-only reliability | Code completed, one successful Charon baseline broadcast | Confirm quota headroom and ≥95% on-time delivery across 30 days |
+| 3.3 Deeper official-source context | Implemented in PR #5 with offline CI | Verify live UN/NASA/BLS excerpts are correctly attributed; assess source gaps; add human fact-review procedure |
+| 3.2 Segmented broadcast writing | Implemented in PR #6 with offline CI | Run full live workflow; inspect spoken script, accuracy, 5–7-minute duration, Charon voice and source audit |
+| 3.4 Quality operations | Planned | Automatic missed-episode alert, measured duration trends, pronunciation review and correction tracking |
+| 4.0 Listening experience | Planned | Mobile-first website, searchable archive, accessible player and source-linked transcripts |
+| 4.1 Podcast distribution | Planned | Validate audio byte-range and RSS with Apple Podcasts and Spotify |
+| 5.0 Personalization | Planned | Optional city, topic and listening-length preferences with privacy safeguards |
+| 6.0 Audience growth | Planned | Privacy-conscious listening metrics, feedback and sustainable distribution |
 
-The first priority is **3.1**, not premature expansion to more voices or
-additional platform integrations. Quality first, then audience reach.
+**Immediate sequence:** validate a live Phase 3.2+3.3 episode, review its facts and actual duration, and tune from measured results. Avoid new voices, new paid APIs, or claims of independent fact-checking without evidence.
