@@ -21,10 +21,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install minimal audition dependencies
+      - name: Install audition dependencies and MP3 verifier
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
           python -m pip install requests
-          command -v ffprobe
+          ffprobe -version | head -n 1
 
       - name: Validate audition offline
         run: python -m unittest discover -s tests -p test_elevenlabs_audition.py -v
