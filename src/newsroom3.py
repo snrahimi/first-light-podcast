@@ -148,7 +148,8 @@ def cisa_kev_candidates(now, get=requests.get):
                 "title": f"CISA adds {cve}: {name}",
                 "summary": description,
                 "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
-                "published": d.isoformat() + "T00:00:00+00:00",
+                "published": d.isoformat(),
+                "publication_precision": "date_only",
                 "age": age * 24,
                 "provenance": "primary_official_catalog",
             })
