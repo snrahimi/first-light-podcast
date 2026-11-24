@@ -59,6 +59,7 @@ class PrimaryResearchTests(unittest.TestCase):
         research33.enrich_dossiers(dossier, get=fake_get)
         stats = research33.validate_research(dossier)
         self.assertEqual(stats["official_documents_checked"], 1)
+        self.assertEqual(stats["official_document_fetches_attempted"], 1)
         self.assertEqual(stats["independent_fact_checks"], 0)
         self.assertFalse(calls[0][1]["allow_redirects"])
         doc = item["official_context"][0]
