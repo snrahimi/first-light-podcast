@@ -9,13 +9,15 @@ import base64
 import io
 import tempfile
 import wave
+import json
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
 from src.first_light import (
     public_base, xml_feed, web_sources, web_page,
     http_json, fetch_weather, weather_narration, _weather_unavailable,
-    _gemini_chunks, _gemini_speech_payload, _tts_gemini
+    _gemini_chunks, _gemini_speech_payload, _tts_gemini,
+    inspect_audio, _trusted_feed_link, news_and_script,
 )
 
 class PodcastTests(unittest.TestCase):
@@ -173,6 +175,52 @@ class PodcastTests(unittest.TestCase):
         ), patch("src.first_light.requests.post", return_value=bad):
             with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
                 _tts_gemini("Good morning.", Path(temp) / "test.wav")
+
+    def test_rss_source_domains_reject_impersonators(self):
+        self.assertTrue(_trusted_feed_link(
+            "NPR World", "https://www.npr.org/sections/world/"))
+        self.assertTrue(_trusted_feed_link(
+            "The Guardian World", "https://www.theguardian.com/world"))
+        self.assertFalse(_trusted_feed_link(
+            "NPR World", "https://npr.org.attacker.example/news"))
+        self.assertFalse(_trusted_feed_link(
+            "BBC World", "http://www.bbc.com/news"))
+        self.assertFalse(_trusted_feed_link(
+            "Al Jazeera", "https://example.net/article"))
+
+    def test_full_editorial_handoff_contains_sourced_plan_and_history(self):
+        from tests_support import editorial_groups
+        now = datetime(2026, 11, 23, 5, 0,
+                       tzinfo=ZoneInfo("America/Chicago"))
+        weather = {"source": "unavailable", "nws_alert_check": "not verified",
+                   "nws_active_alerts": []}
+        with patch.dict(os.environ, {"GH_TOKEN": "test", "GITHUB_REPOSITORY": "a/b"}), \
+             patch("src.first_light.rss_news", return_value=editorial_groups()), \
+             patch("src.first_light.editorial.load_history", return_value=[]), \
+             patch("src.first_light.optional_gemini_script", return_value=None):
+            notes, sources, script, edition = news_and_script(None, now, weather)
+        self.assertGreaterEqual(edition["count"], 5)
+        self.assertLessEqual(edition["count"], 8)
+        self.assertTrue(edition["script_mode"].startswith("source-attributed"))
+        self.assertIn("AI assistance", script)
+        self.assertIn("not independent verification", notes)
+        self.assertGreaterEqual(len(sources), 5)
+
+    def test_audio_probe_detects_short_and_invalid_mp3(self):
+        valid = {"format": {"duration": "360.0", "bit_rate": "192000"},
+                 "streams": [{"codec_name": "mp3", "sample_rate": "44100",
+                              "channels": 1}]}
+        with patch("src.first_light.subprocess.run",
+                   return_value=SimpleNamespace(stdout=json.dumps(valid))):
+            report = inspect_audio(Path("/tmp/test.mp3"))
+        self.assertTrue(report["duration_in_target"])
+        self.assertEqual(report["sample_rate_hz"], 44100)
+        valid["format"]["duration"] = "55.0"
+        with patch("src.first_light.subprocess.run",
+                   return_value=SimpleNamespace(stdout=json.dumps(valid))):
+            with self.assertRaises(RuntimeError):
+                inspect_audio(Path("/tmp/test.mp3"))
+
 
 if __name__ == "__main__":
     unittest.main()
