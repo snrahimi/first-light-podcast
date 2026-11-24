@@ -173,6 +173,22 @@ class PrimaryResearchTests(unittest.TestCase):
         )
         self.assertIsNone(wrong)
 
+    def test_same_event_paraphrase_matches_without_generic_country_guess(self):
+        score = research33._topic_match_score(
+            "United States announces sanctions on Lebanon banks",
+            "Washington details Lebanon banking sanctions",
+            "Officials say the restrictions apply to several Lebanon banks")
+        self.assertGreater(score, 0.0)
+        unrelated = research33._topic_match_score(
+            "Ukraine energy infrastructure attacks kill civilians",
+            "Ukraine energy summit discusses new transportation",
+            "Government officials attended a transportation summit")
+        self.assertEqual(unrelated, 0.0)
+        self.assertEqual(research33._topic_match_score(
+            "Flood warnings in Japan after storm",
+            "Election results announced in Japan",
+            "Officials report legislative negotiations"), 0.0)
+
     def test_selected_world_lead_links_relevant_un_official_report(self):
         from src import newsroom3
         title = "Security Council discusses Ukraine energy infrastructure attacks"
