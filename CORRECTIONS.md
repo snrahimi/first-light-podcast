@@ -53,16 +53,17 @@ consequential news with the original linked reporting.
 
 Every newly created release contains a revision marker. If a same-date
 release is regenerated, its show notes explicitly record the revision number
-and UTC time. **Earlier MP3 and transcript assets may be overwritten by the
-same-date rebuild.** This revision log is transparency about publication,
-not an independently reviewed correction or an immutable archive.
+and UTC time. **The prior MP3, transcript, source-audit JSON and release notes
+are archived with revision-numbered filenames before the current files are
+replaced.** If archiving fails, replacement is blocked. This revision log
+documents publication changes, not an independently reviewed correction.
 
 Corrections to consequential claims require a human investigation, a dated
 explanation, and supporting original sources. Never silently change a quote,
 claim or attribution and describe the automated source check as verification.
-For a permanent audit trail, link the public correction issue to the revised
-release and preserve any earlier audio outside the automatically clobbered
-daily asset if it matters.
+For an auditable correction, link the public correction issue to the
+specific revised release and archive the supporting evidence. Release
+versioning does not verify the correction's factual accuracy.
 
 ## Delivery watchdog
 
