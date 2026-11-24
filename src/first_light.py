@@ -667,6 +667,9 @@ def news_and_script(_client, now, weather):
     )
     edition = editorial.curate(groups, recent, now)
     dossiers = newsroom3.build_dossiers(edition, leads)
+    # Enrich already selected stories with high-overlap, traceable feed
+    # reports. Run the exact-source ledger check AFTER any added excerpts.
+    research33.link_selected_feed_context(dossiers, groups)
     evidence_metrics = newsroom3.validate_dossiers(dossiers)
     research33.enrich_dossiers(dossiers)
     research_metrics = research33.validate_research(dossiers)
@@ -706,7 +709,17 @@ def news_and_script(_client, now, weather):
         newsroom3.script_numeric_gate(script, dossiers, weather, now)
     quality["estimated_duration_seconds"] = broadcast32.estimate_duration(len(script.split()))
     quality["expected_target_seconds"] = [300, 420]
+    quality["duration_preflight"] = broadcast32.duration_preflight(len(script.split()))
     quality["draft"] = draft_stats
+    if not quality["duration_preflight"]["estimated_in_target"]:
+        LOG.warning(
+            "Pre-narration duration estimate %ds is short of 5 minutes by %ds "
+            "(%d more evidence-supported words needed); do not pad with "
+            "unsupported claims",
+            quality["duration_preflight"]["estimated_seconds"],
+            quality["duration_preflight"]["shortfall_seconds"],
+            quality["duration_preflight"]["shortfall_words"],
+        )
     edition["script_mode"] = mode
     edition["script_quality"] = quality
     edition["newsroom3_audit"] = newsroom3.audit_export(
