@@ -13,6 +13,10 @@ import json
 import logging
 import math
 import re
+import hashlib
+import os
+import time
+from pathlib import Path
 
 import requests
 
@@ -95,34 +99,121 @@ def _condense(s):
     return re.sub(r"\s+", " ", str(s or "")).strip()
 
 
-def _call_gemini(key, model, prompt, post=requests.post):
-    """A single scriptwriting request. Status and length only in logs."""
-    response = post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.14, "maxOutputTokens": 2850},
-        },
-        timeout=(12, 95),
-    )
-    if response.status_code != 200:
-        LOG.warning("Phase 3.2 writing provider HTTP %s; using safe fallback",
-                    response.status_code)
+TRANSIENT_WRITER_STATUSES = frozenset((500, 502, 503, 504))
+MAX_WRITER_REQUESTS_PER_SECTION = 3
+MAX_CACHE_BYTES = 14_000
+CACHE_MAX_AGE_SECONDS = 12 * 3600
+
+
+def _call_gemini(key, model, prompt, post=requests.post,
+                 sleep=time.sleep, request_counter=None):
+    """Retry only temporary server faults. Never retry quota 429s or 4xx.
+
+    Three requests maximum per section, with a short bounded delay. No
+    paid-model switch or indefinite retries. Only status and word counts
+    appear in logs, never source excerpts or API keys.
+    """
+    for attempt in range(MAX_WRITER_REQUESTS_PER_SECTION):
+        try:
+            if request_counter is not None:
+                request_counter[0] += 1
+            response = post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.14, "maxOutputTokens": 2850},
+                },
+                timeout=(12, 95),
+            )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            if attempt + 1 == MAX_WRITER_REQUESTS_PER_SECTION:
+                LOG.warning("Gemini writer transport failure (%s); fallback",
+                            type(exc).__name__)
+                return None
+            LOG.warning("Temporary Gemini writer transport issue (%s), retry %d",
+                        type(exc).__name__, attempt + 1)
+            sleep(min(3, 0.6 * 2**attempt))
+            continue
+        if response.status_code == 429:
+            LOG.warning("Gemini writer HTTP 429: quota/rate limit; no automatic retry")
+            return None
+        if response.status_code in TRANSIENT_WRITER_STATUSES:
+            if attempt + 1 < MAX_WRITER_REQUESTS_PER_SECTION:
+                # Avoid unbounded server-provided delays and thundering herds.
+                LOG.warning("Gemini writer HTTP %d; retry %d",
+                            response.status_code, attempt + 1)
+                sleep(min(3, 0.6 * 2**attempt))
+                continue
+        if response.status_code != 200:
+            LOG.warning("Gemini writer HTTP %s; using safe fallback",
+                        response.status_code)
+            return None
+        try:
+            parts = response.json()["candidates"][0]["content"]["parts"]
+            script = _condense(" ".join(x.get("text", "") for x in parts))
+        except (ValueError, TypeError, KeyError, IndexError):
+            return None
+        if any(phrase in script.lower() for phrase in (
+            "as an ai language model", "here is the script:", "source material:",
+            "the user asked", "system prompt"
+        )):
+            LOG.warning("Gemini writing response included model-instruction boilerplate")
+            return None
+        LOG.info("Gemini broadcast section drafted: %d words", len(script.split()))
+        return script
+    return None
+
+
+def _cache_path(cache_dir, model, prompt):
+    if not cache_dir:
+        return None
+    identity = hashlib.sha256((model + "\n" + prompt).encode("utf-8")).hexdigest()
+    return Path(cache_dir) / ("section-" + identity + ".json")
+
+
+def _cached_section(cache_dir, model, prompt):
+    path = _cache_path(cache_dir, model, prompt)
+    if path is None:
         return None
     try:
-        parts = response.json()["candidates"][0]["content"]["parts"]
-        script = _condense(" ".join(x.get("text", "") for x in parts))
-    except (ValueError, TypeError, KeyError, IndexError):
+        if not path.is_file() or path.stat().st_size > MAX_CACHE_BYTES:
+            return None
+        cache = json.loads(path.read_text(encoding="utf-8"))
+        if (cache.get("version") != 1 or
+            cache.get("identity") != path.stem or
+            time.time() - float(cache.get("created", 0)) not in range(0, CACHE_MAX_AGE_SECONDS + 1)):
+            return None
+        script = cache.get("script")
+        if not isinstance(script, str) or _section_rejection(script):
+            return None
+        LOG.info("Reusing matching same-edition cached Gemini section (%d words)",
+                 len(script.split()))
+        return script
+    except (OSError, ValueError, TypeError, OverflowError):
         return None
-    if any(phrase in script.lower() for phrase in (
-        "as an ai language model", "here is the script:", "source material:",
-        "the user asked", "system prompt"
-    )):
-        LOG.warning("Gemini writing response included model-instruction boilerplate")
-        return None
-    LOG.info("Gemini broadcast section drafted: %d words", len(script.split()))
-    return script
+
+
+def _remember_section(cache_dir, model, prompt, section):
+    path = _cache_path(cache_dir, model, prompt)
+    if path is None or _section_rejection(section):
+        return
+    item = {
+        "version": 1,
+        "identity": path.stem,
+        "created": int(time.time()),
+        "script": section,
+    }
+    data = json.dumps(item, ensure_ascii=False)
+    if len(data.encode("utf-8")) > MAX_CACHE_BYTES:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(data, encoding="utf-8")
+        temporary.replace(path)
+    except OSError as exc:
+        LOG.warning("Script section cache unavailable (%s)", type(exc).__name__)
 
 
 def plan(edition):
@@ -227,8 +318,8 @@ def _check_section(script, minimum=100):
 
 
 def generated_script(now, edition, dossiers, weather_text, key, model,
-                     post=requests.post):
-    """Returns (script, metadata) or (None, explanation), max two API calls.
+                     post=requests.post, cache_dir=None, sleep=time.sleep):
+    """Returns (script, metadata) or (None, explanation), two logical sections.
 
     Weather is appended from verified structured forecast fields, not a
     language model. The caller remains responsible for checking the
@@ -264,24 +355,54 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         sum(x["distinct_attributed_excerpts"] for x in rest_beats),
         world_target, rest_target,
     )
+    # A valid section is saved independently so a 503 in the other
+    # section does not discard the completed work. Cache identity includes
+    # all evidence cards, date, model and requested section behavior.
+    if cache_dir is None:
+        cache_dir = os.getenv("FIRST_LIGHT_SCRIPT_CACHE_DIR", "").strip()
+    count = [0]
     try:
-        a = _call_gemini(
-            key, model, _prompt(now, "world", world_material, world_target, world_beats), post=post
-        )
+        a_prompt = _prompt(now, "world", world_material, world_target, world_beats)
+        a = _cached_section(cache_dir, model, a_prompt)
+        a_hit = a is not None
+        if not a_hit:
+            a = _call_gemini(key, model, a_prompt, post=post,
+                             sleep=sleep, request_counter=count)
         rejected = _section_rejection(a, minimum=100)
         if rejected:
             LOG.warning("Gemini world-section rejected: %s", rejected)
-            return None, {"reason": "world_" + rejected, "provider_calls": 1}
-        b = _call_gemini(
-            key, model, _prompt(now, "other", rest_material, rest_target, rest_beats), post=post
-        )
+            return None, {"reason": "world_" + rejected,
+                          "provider_calls": count[0]}
+        if not a_hit:
+            # Source-number validation is needed before a section can be
+            # reused; do not cache malformed claims or unsourced numbers.
+            try:
+                newsroom3.script_numeric_gate(a, dossiers, {}, now)
+                _remember_section(cache_dir, model, a_prompt, a)
+            except ValueError:
+                LOG.warning("World section has unsupported figures; not caching")
+        b_prompt = _prompt(now, "other", rest_material, rest_target, rest_beats)
+        b = _cached_section(cache_dir, model, b_prompt)
+        b_hit = b is not None
+        if not b_hit:
+            b = _call_gemini(key, model, b_prompt, post=post,
+                             sleep=sleep, request_counter=count)
         rejected = _section_rejection(b, minimum=100)
         if rejected:
             LOG.warning("Gemini mixed-beat section rejected: %s", rejected)
-            return None, {"reason": "mixed_" + rejected, "provider_calls": 2}
+            return None, {"reason": "mixed_" + rejected,
+                          "provider_calls": count[0]}
+        if not b_hit:
+            try:
+                newsroom3.script_numeric_gate(b, dossiers, {}, now)
+                _remember_section(cache_dir, model, b_prompt, b)
+            except ValueError:
+                LOG.warning("Mixed-beat section has unsupported figures; not caching")
     except requests.RequestException as exc:
         LOG.warning("Segmented script request unavailable (%s)", type(exc).__name__)
-        return None, {"reason": type(exc).__name__, "provider_calls": 2}
+        return None, {"reason": type(exc).__name__,
+                      "provider_calls": count[0]}
+
 
     opening = (
         f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}. "
@@ -303,7 +424,9 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
     words = len(script.split())
     duration = duration_preflight(words)
     return script, {
-        "provider_calls": 2,
+        "provider_calls": count[0],
+        "cache_hits": int(a_hit) + int(b_hit),
+        "retries": max(0, count[0] - (2 - int(a_hit) - int(b_hit))),
         "segment_word_targets": {"world": world_target, "other": rest_target},
         "evidence_points": sum(
             beat["distinct_attributed_excerpts"] for beat in world_beats + rest_beats
