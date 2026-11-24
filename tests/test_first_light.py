@@ -199,6 +199,8 @@ class PodcastTests(unittest.TestCase):
         with patch.dict(os.environ, {"GH_TOKEN": "test", "GITHUB_REPOSITORY": "a/b"}), \
              patch("src.first_light.rss_news", return_value=editorial_groups()), \
              patch("src.first_light.editorial.load_history", return_value=[]), \
+             patch("src.first_light.newsroom3.collect_source_expansion", \
+                   return_value=({section: [] for section in editorial_groups()}, [])), \
              patch("src.first_light.optional_gemini_script", return_value=None):
             notes, sources, script, edition = news_and_script(None, now, weather)
         self.assertGreaterEqual(edition["count"], 5)
@@ -207,6 +209,10 @@ class PodcastTests(unittest.TestCase):
         self.assertIn("artificial intelligence assistance", script)
         self.assertIn("not independent verification", notes)
         self.assertGreaterEqual(len(sources), 5)
+        self.assertGreater(edition["newsroom3_audit"]["attributed_claims"], 0)
+        self.assertEqual(
+            edition["newsroom3_audit"]["independently_verified_facts"], 0
+        )
 
     def test_audio_probe_detects_short_and_invalid_mp3(self):
         valid = {"format": {"duration": "360.0", "bit_rate": "192000"},
