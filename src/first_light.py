@@ -27,11 +27,12 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33
+    from . import editorial, newsroom3, research33, broadcast32
 else:
     import editorial
     import newsroom3
     import research33
+    import broadcast32
 import base64
 import io
 import wave
@@ -669,23 +670,33 @@ def news_and_script(_client, now, weather):
     evidence_metrics = newsroom3.validate_dossiers(dossiers)
     research33.enrich_dossiers(dossiers)
     research_metrics = research33.validate_research(dossiers)
-    script = optional_gemini_script(now, edition, weather, dossiers)
-    mode = "Gemini evidence-guided brief" if script else "source-attributed RSS fallback"
+    # Two source-partitioned drafts, rather than one oversized prompt
+    # and another paid/limited call merely asking for extra words.
+    script, draft_stats = broadcast32.generated_script(
+        now, edition, dossiers, weather_narration(weather),
+        os.getenv("GEMINI_API_KEY", "").strip(),
+        os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+    )
+    mode = "Gemini segmented evidence-led 3.2" if script else "source-attributed RSS fallback"
     if script is None:
         script = fallback_readout(now, edition, weather)
-    # Only approved standard acronym expansions, never an invented name reading.
+        LOG.warning(
+            "Segmented Gemini writing unavailable (%s); using source-attributed fallback",
+            draft_stats.get("reason", "unknown")
+        )
     script = editorial.speaking_text(script)
-    if mode == "Gemini evidence-guided brief":
-        quality = editorial.script_quality(script, edition, now)
-        newsroom3.script_numeric_gate(script, dossiers, weather, now)
+    if mode == "Gemini segmented evidence-led 3.2":
+        quality = broadcast32.quality(script, edition, now)
     else:
         quality = {
             "script_words": len(script.split()),
             "fallback_shorter_than_target": True,
             "selected_stories": edition["count"],
         }
-        # Even the canned fallback cannot introduce a fabricated number.
-        newsroom3.script_numeric_gate(script, dossiers, weather, now)
+    newsroom3.script_numeric_gate(script, dossiers, weather, now)
+    quality["estimated_duration_seconds"] = broadcast32.estimate_duration(len(script.split()))
+    quality["expected_target_seconds"] = [300, 420]
+    quality["draft"] = draft_stats
     edition["script_mode"] = mode
     edition["script_quality"] = quality
     edition["newsroom3_audit"] = newsroom3.audit_export(
@@ -1307,6 +1318,12 @@ def main():
                 "repeats_avoided": edition["repeated_topics_avoided"],
                 "evidence_claims": edition["newsroom3_audit"]["attributed_claims"],
                 "independently_verified_claims": 0,
+                "official_documents_reviewed": edition["newsroom3_audit"]["phase33_research"]["official_documents_checked"],
+                "script_words": edition["script_quality"]["script_words"],
+                "estimated_spoken_seconds": edition["script_quality"]["estimated_duration_seconds"],
+                "script_target_duration_estimated": (
+                    300 <= edition["script_quality"]["estimated_duration_seconds"] <= 420
+                ),
                 "evidence_audit_url": base + "/evidence.json",
                 "discovery_links_used_as_facts": False,
             },
