@@ -267,14 +267,14 @@ class PrimaryResearchTests(unittest.TestCase):
         self.assertEqual(newsroom3.validate_dossiers(dossiers)[
             "attributed_claims"], 1)
 
-    def test_only_three_official_retrievals_per_edition(self):
+    def test_only_four_official_retrievals_per_edition(self):
         d = {"Science": [nasa_dossier() for _ in range(8)]}
         calls = []
         def fake_get(url, **kw):
             calls.append(url)
             return html_response(url, DOCUMENT)
         research33.enrich_dossiers(d, get=fake_get)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
 
 
 if __name__ == "__main__":
