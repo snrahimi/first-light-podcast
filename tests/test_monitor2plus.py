@@ -1,5 +1,7 @@
 """Offline package 2+ operational monitoring and release revision tests."""
 import unittest
+import tempfile
+from pathlib import Path
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -103,6 +105,46 @@ class Monitor2PlusTests(unittest.TestCase):
         self.assertEqual(record["gemini_text_requests"], 3)
         self.assertEqual(record["narrator"], "Gemini Charon")
         self.assertNotIn("token", str(record).lower())
+
+    def test_archive_prior_release_assets_before_same_date_overwrite(self):
+        tag = "first-light-2026-11-24"
+        names = (tag + ".mp3", tag + ".txt", tag + "-evidence.json")
+        observed_uploads = []
+        with tempfile.TemporaryDirectory() as temp:
+            def fake_gh(*args, **kwargs):
+                if args[:3] == ("release", "view", tag):
+                    return SimpleNamespace(returncode=0,
+                                           stdout="\n".join(names) + "\n")
+                if args[:3] == ("release", "download", tag):
+                    original = args[args.index("--pattern") + 1]
+                    dest = Path(args[args.index("--dir") + 1]) / original
+                    dest.write_bytes(b"Earlier, already published episode")
+                    return SimpleNamespace(returncode=0, stdout="")
+                if args[:3] == ("release", "upload", tag):
+                    observed_uploads.append(Path(args[3]))
+                    return SimpleNamespace(returncode=0, stdout="")
+                raise AssertionError(f"Unexpected gh command: {args}")
+            with patch("src.first_light.WORK", Path(temp)), patch(
+                "src.first_light.run_gh", side_effect=fake_gh
+            ):
+                first_light.archive_prior_release_assets(tag, "Initial release body")
+            self.assertEqual(len(observed_uploads), 4)
+            self.assertTrue(all(x.exists() for x in observed_uploads))
+            self.assertTrue(any(x.name.endswith("-revision1.mp3")
+                                for x in observed_uploads))
+            self.assertTrue(any(x.name.endswith("-revision1-notes.md")
+                                for x in observed_uploads))
+
+    def test_archive_refuses_incomplete_previous_release(self):
+        with tempfile.TemporaryDirectory() as temp, patch(
+            "src.first_light.WORK", Path(temp)
+        ), patch("src.first_light.run_gh", return_value=SimpleNamespace(
+            returncode=0, stdout="first-light-2026-11-24.mp3\n"
+        )) as gh:
+            with self.assertRaisesRegex(RuntimeError, "incomplete"):
+                first_light.archive_prior_release_assets(
+                    "first-light-2026-11-24", "Old notes")
+            self.assertEqual(gh.call_count, 1)
 
     def test_same_date_release_revisions_are_explicit_and_monotonic(self):
         first = first_light.release_revision_notes(
