@@ -334,6 +334,33 @@ class PodcastTests(unittest.TestCase):
             edition["newsroom3_audit"]["independently_verified_facts"], 0
         )
 
+    def test_fallback_weather_rounding_passes_newsroom_gate(self):
+        """Live NWS floats must survive the complete script handoff."""
+        from tests_support import editorial_groups
+        now = datetime(2026, 11, 23, 5, 0,
+                       tzinfo=ZoneInfo("America/Chicago"))
+        weather = {
+            "source": "NWS period forecast", "temperature_f": 67.3,
+            "high_f": 52.2, "low_f": 48.4, "max_rain_percent": 20.4,
+            "wind_mph": 9.6, "nws_alert_check": "checked",
+            "nws_active_alerts": [],
+        }
+        with patch.dict(os.environ, {
+            "GH_TOKEN": "test", "GITHUB_REPOSITORY": "a/b"
+        }), patch("src.first_light.rss_news",
+                  return_value=editorial_groups()), patch(
+            "src.first_light.editorial.load_history", return_value=[]
+        ), patch(
+            "src.first_light.newsroom3.collect_source_expansion",
+            return_value=({section: [] for section in editorial_groups()}, [])
+        ), patch("src.first_light.optional_gemini_script", return_value=None):
+            _, _, script, edition = news_and_script(None, now, weather)
+        self.assertEqual(edition["script_mode"],
+                         "source-attributed RSS fallback")
+        self.assertIn("around 67 degrees", script)
+        self.assertIn("high is near 52", script)
+        self.assertIn("low is near 48", script)
+
     def test_audio_probe_detects_short_and_invalid_mp3(self):
         valid = {"format": {"duration": "360.0", "bit_rate": "192000"},
                  "streams": [{"codec_name": "mp3", "sample_rate": "44100",
