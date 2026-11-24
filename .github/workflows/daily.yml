@@ -61,8 +61,20 @@ jobs:
           FEED_BASE_URL: ${{ vars.FEED_BASE_URL }}
         run: python -m src.first_light
 
-      - name: Preserve validated script sections for same-evidence retries
+      - name: Check whether validated writer sections exist
+        id: saved_sections
         if: always()
+        shell: bash
+        run: |
+          if [ -d .first-light-cache ] && find .first-light-cache -type f -name 'section-*.json' -print -quit | grep -q .; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No validated script sections to preserve."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Preserve validated script sections for same-evidence retries
+        if: always() && steps.saved_sections.outputs.present == 'true'
         uses: actions/cache/save@v4
         with:
           path: .first-light-cache

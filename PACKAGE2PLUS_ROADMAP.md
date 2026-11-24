@@ -2,6 +2,8 @@
 
 Implementation and acceptance ledger. Updated November 24, 2026.
 
+Package 2+.5 details are below; no new paid provider or narrator is enabled.
+
 **Scope:** 46 core proposed capabilities plus 7 strongly recommended
 operational features. These are *capabilities*, not 53 separate deployable
 services. "Implemented" means code exists with offline regression tests or
@@ -80,6 +82,70 @@ existing live production evidence. "Partial" means only some safeguards exist.
 | F. Audio/pronunciation QA | Partial 2+.3 | Common official acronyms and MP3 integrity checks; no full proper-name QA or automated clipping scan |
 | G. Rolling 30-day quality report | Implemented 2+.4 | Completeness, Charon duration, fallback, official page and text-request metrics only for releases with health metadata |
 
+## Package 2+.5: Reliability and editorial quality (CI passed, live pending)
+
+**Motivation:** November 24 live run #45467360399 published a 248.5-second
+Charon episode with 641 fallback words. The Gemini world writer exhausted
+three HTTP 503 requests. The GitHub releases memory API failed, and the
+Actions cache attempted to save an empty directory. Same-day release
+revision archives worked. Source story selection included two Colombia
+world leads and a luxury property listing for the business beat.
+
+Changes on `feature/package2plus-5-reliability-editorial`:
+
+1. **Episode memory:** Bounded retry for transient GitHub API errors, honest
+   HTTP status diagnostics without credentials, and public Pages `memory.json`
+   as a seven-day fallback. Pages backup is available **only after an episode
+   publishes with this version**; transient errors can still leave history
+   unavailable. Stored topics are **not** source evidence.
+2. **Gemini writing:** Retain three attempts per section and stop on 429.
+   HTTP 5xx/transport retries use slightly longer bounded backoff, with
+   `Retry-After` hints capped at 10 seconds. **No automatic text-model
+   switch** and no unapproved billable requests.
+3. **Source-led fallback:** Speak additional distinct, attributed excerpts
+   from the already validated selected-story dossier and official statements
+   where available. Remove repetitive boilerplate. Never invent details,
+   copy full publisher articles, or pad to force a runtime.
+4. **Actions cache:** Save section files only when actually present. Preserve
+   verified sections if a later section fails. A failed first section
+   cannot create a reusable success by itself.
+5. **Editorial selection:** Penalize near-duplicate regions/event terms when
+   high-impact candidates are close in score; give economic developments
+   higher business priority than private luxury real-estate listings.
+   This remains a transparent headline heuristic, not human news judgment.
+6. **Episode revision safety:** Select the canonical current MP3 for RSS
+   enclosures, never a retained `revisionN.mp3` archive.
+
+### Evaluated but **not enabled**: free-tier text failover
+
+Google's official Gemini pricing page lists both `gemini-3.1-flash-lite`
+and `gemini-3.5-flash-lite` with a Free Tier for text input/output:
+https://ai.google.dev/gemini-api/docs/pricing
+
+A price table is **not confirmation** that either model is actually available
+on the specific Google project or that its billing configuration is free.
+There are also project-specific RPM/RPD constraints and provider outages.
+Before enabling automatic model switching, the owner must verify both models
+in Google AI Studio (model availability, usage caps, API tier, data-use terms
+and billing) and explicitly approve the failover and permitted request
+budget. Current production sends only to `GEMINI_MODEL` and falls back to
+source-attributed deterministic narration if writing fails. Gemini Charon
+remains the only speech provider.
+
+### Package 2+.5 acceptance tests
+
+- Offline CI: 106 tests passed in PR #14. Unit tests cover 503 recovery; non-retryable 403 with Pages backup;
+  malformed or stale memory; editorial diversity and business relevance;
+  source-restricted fallback; bounded model retries; current versus archived
+  RSS media selection.
+- Full production acceptance must confirm *actual* Charon audio and Pages
+  updates, confirm the memory backup is reachable and used after an injected
+  GitHub API outage, and audit lead-story choices and historical repeats.
+- A successful workflow is **not** a guarantee of five minutes, accurate
+  source claims, or provider-side quota safety. A short sourced broadcast is
+  permitted. Human review remains required for consequential allegations.
+
+---
 ## Acceptance roadmap
 
 1. **CI and security:** 2+.1–2+.4 pass offline tests, no hidden paid

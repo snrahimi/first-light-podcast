@@ -12,6 +12,7 @@ from difflib import SequenceMatcher
 import json
 import logging
 import re
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -25,6 +26,14 @@ that the their them there these this those to up us was were what when where
 which while who will with would you your after amid said says latest live
 updates breaking reports report new news world today week now more how why
 could about across against near around early first second top including
+""".split())
+ECONOMIC_IMPACT = frozenset("""
+inflation unemployment jobs employment wages payrolls central banking
+interest rates tariffs trade exports imports recession gdp earnings
+investment regulation supply chains economic economy
+""".split())
+PRIVATE_LUXURY = frozenset("""
+mansion luxury celebrity celebrity-owned penthouse estate villa
 """.split())
 IMPACT_WORDS = frozenset("""
 election elections war ceasefire peace strikes attack attacks killed deaths
@@ -148,27 +157,112 @@ def read_prior_releases(releases, now, days=7):
     return history[:100]
 
 
-def load_history(repository, token, now, timeout=(8, 15)):
-    """Fail safely to a stateless edition if GitHub history is unreachable."""
+def memory_snapshot(edition, history, now, days=7):
+    """Public, bounded seven-day topic backup; not a fact or source archive."""
+    candidates = [
+        {"title": story["title"], "category": story["category"],
+         "date": edition["date"]}
+        for chapter in edition["rundown"].values() for story in chapter
+    ] + list(history)
+    unique, seen = [], set()
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        title, category, day = (item.get("title"), item.get("category"),
+                                item.get("date"))
+        if not isinstance(title, str) or not isinstance(category, str) or not isinstance(day, str):
+            continue
+        try:
+            age = (now.date() - datetime.fromisoformat(day).date()).days
+        except ValueError:
+            continue
+        if not 0 <= age <= days or not 5 <= len(title) <= 450:
+            continue
+        key = (day, title.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append({"title": title, "category": category, "date": day})
+        if len(unique) >= 100:
+            break
+    return {"version": 1, "through_date": edition["date"], "topics": unique}
+
+
+def _read_memory_snapshot(payload, now, days=7):
+    """Reject malformed/stale public Pages snapshots without crashing curation."""
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        return []
+    try:
+        snapshot_age = (now.date() -
+                        datetime.fromisoformat(payload["through_date"]).date()).days
+    except (KeyError, ValueError, TypeError):
+        return []
+    if not 0 <= snapshot_age <= days:
+        return []
+    result = memory_snapshot({"date": payload["through_date"], "rundown": {}},
+                             payload.get("topics", [])[:100]
+                             if isinstance(payload.get("topics"), list) else [],
+                             now, days)["topics"]
+    return [item for item in result if item["date"] != now.date().isoformat()]
+
+
+def load_history(repository, token, now, timeout=(8, 15), *,
+                 get=requests.get, sleep=time.sleep, fallback_url=None):
+    """Try bounded API retries, then our previous public Pages memory snapshot.
+
+    A GitHub 403 is retried only if rate-limit headers explicitly indicate
+    exhaustion; credentials are never logged. Publisher evidence is not
+    obtained from these memories, which only reduce headline repetition.
+    """
     if not token or not re.fullmatch(r"[\w.-]+/[\w.-]+", str(repository or "")):
         LOG.warning("Episode memory is unavailable: repository or token missing")
         return []
-    try:
-        response = requests.get(
-            "https://api.github.com/repos/" + repository + "/releases",
-            params={"per_page": 20},
-            headers={
-                "Authorization": "Bearer " + token,
-                "Accept": "application/vnd.github+json",
-            },
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        return read_prior_releases(response.json(), now)
-    except (requests.RequestException, ValueError, TypeError) as exc:
-        LOG.warning("Could not retrieve past episode memory (%s)", type(exc).__name__)
-        return []
-
+    endpoint = "https://api.github.com/repos/" + repository + "/releases"
+    for attempt in range(3):
+        try:
+            response = get(
+                endpoint, params={"per_page": 30},
+                headers={"Authorization": "Bearer " + token,
+                         "Accept": "application/vnd.github+json",
+                         "X-GitHub-Api-Version": "2022-11-28"},
+                timeout=timeout,
+            )
+            status = response.status_code
+            if status == 200:
+                data = response.json()
+                if not isinstance(data, list):
+                    raise ValueError("Unexpected releases payload")
+                result = read_prior_releases(data, now)
+                LOG.info("Episode memory loaded from GitHub releases: %d topics",
+                         len(result))
+                return result
+            retryable = status in (429, 500, 502, 503, 504) or (
+                status == 403 and response.headers.get("X-RateLimit-Remaining") == "0"
+            )
+            LOG.warning("GitHub memory request HTTP %d; retryable=%s",
+                        status, retryable)
+            if not retryable:
+                break
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            LOG.warning("Episode memory transport/payload failure (%s)",
+                        type(exc).__name__)
+        if attempt < 2:
+            sleep(min(3, 1 + attempt))
+    if fallback_url and re.fullmatch(r"https://[a-zA-Z0-9._/-]+/memory\.json",
+                                     fallback_url):
+        try:
+            response = get(fallback_url, timeout=timeout)
+            response.raise_for_status()
+            result = _read_memory_snapshot(response.json(), now)
+            if result:
+                LOG.info("Episode memory recovered from public Pages backup: %d topics",
+                         len(result))
+                return result
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            LOG.warning("Public Pages memory backup unavailable (%s)",
+                        type(exc).__name__)
+    LOG.warning("No recent episode memory available; continuing without it")
+    return []
 
 def _historical_status(cluster, history):
     """Distinguish repetitive headlines from possible developing events."""
@@ -193,7 +287,14 @@ def _rank(cluster, history):
     }.get(cluster["category"], 34)
     score += round(18 * (1 - age / 42))
     score += min(len(cluster["publishers"]) - 1, 2) * 8
-    score += min(len(key_tokens(published["title"]) & IMPACT_WORDS), 2) * 7
+    tokens = key_tokens(published["title"])
+    score += min(len(tokens & IMPACT_WORDS), 2) * 7
+    if cluster["category"] == "business":
+        # Economic policy, markets and employment generally outrank private
+        # luxury transactions; never assert that an item is unimportant.
+        score += min(2, len(tokens & ECONOMIC_IMPACT)) * 7
+        if tokens & PRIVATE_LUXURY and not tokens & ECONOMIC_IMPACT:
+            score -= 14
     # Evidence depth is only a modest tiebreaker. High-impact urgent
     # breaking stories must not be excluded because reporting is sparse.
     distinct_excerpts = {
@@ -240,15 +341,33 @@ def curate(groups, history, now):
     chosen, chosen_ids, used_regions = [], set(), set()
 
     def take(category, count, prefer_new_region=False):
-        available = [
-            c for c in candidates
-            if c["category"] in category and id(c) not in chosen_ids
-        ]
-        if prefer_new_region:
-            available.sort(key=lambda c: (
-                c["region"] in used_regions, -c["score"], c["lead"]["age"],
+        for _ in range(count):
+            available = [
+                c for c in candidates
+                if c["category"] in category and id(c) not in chosen_ids
+            ]
+            if not available:
+                break
+
+            def adjusted(c):
+                # Keep major breaking stories eligible even when their region
+                # repeats, but prefer distinct events when scores are close.
+                peers = [p for p in chosen if p["category"] == c["category"]]
+                same_region = (c["region"] != "other"
+                               and any(p["region"] == c["region"] for p in peers))
+                overlap = max((
+                    len(key_tokens(c["lead"]["title"]) &
+                        key_tokens(p["lead"]["title"]))
+                    for p in peers
+                ), default=0)
+                penalty = (10 if same_region else 0) + (8 if overlap >= 3 else 0)
+                if prefer_new_region and c["region"] in used_regions:
+                    penalty += 7
+                return c["score"] - penalty
+
+            item = max(available, key=lambda c: (
+                adjusted(c), -c["lead"].get("age", 999), c["lead"]["title"]
             ))
-        for item in available[:count]:
             chosen.append(item)
             chosen_ids.add(id(item))
             used_regions.add(item["region"])
