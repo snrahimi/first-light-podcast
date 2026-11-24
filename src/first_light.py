@@ -23,7 +23,8 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import requests
-from openai import OpenAI
+import calendar
+import feedparser
 from PIL import Image, ImageDraw, ImageFont
 
 LOG = logging.getLogger("firstlight")
@@ -31,7 +32,6 @@ TZ = ZoneInfo("America/Chicago")
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
 SITE = ROOT / "site"
-MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5")
 TITLE = "First Light: World Report"
 
 ET.register_namespace("itunes", "http://www.itunes.com/dtds/podcast-1.0.dtd")
@@ -154,98 +154,322 @@ def web_sources(response):
     return out[:35]
 
 
-def news_and_script(client, now, weather):
-    stamp = now.strftime("%A, %B %d, %Y at %I:%M %p Central")
-    prompt = f"""Search live public web sources and prepare carefully attributed research notes
-for a 5 AM daily international news broadcast in San Antonio, Texas, as of {stamp}.
-Prioritize the last 24 hours and clearly distinguish new developments from older context.
-Use Reuters/AP/BBC/FT and dependable primary sources where appropriate.
-Verify dates and key claims against multiple independent sources where feasible.
-Find 4–6 important TOP WORLD HEADLINES; then geographically varied AROUND THE WORLD
-(Europe, Asia, Middle East, Africa, Americas if substantive developments exist);
-BUSINESS AND MARKETS (explicitly distinguish market closes, futures, weekends and holidays;
-only quote verifiable, date-stamped index values); SCIENCE AND TECH
-(including research, space, AI and cybersecurity); and WHAT TO WATCH TODAY.
-Return detailed factual RESEARCH NOTES with citations. Include uncertainty.
-Never invent prices, quotes, news, or future events.
-"""
-    result = client.responses.create(
-        model=MODEL,
-        reasoning={"effort": "low"},
-        tools=[{"type": "web_search", "search_context_size": "high"}],
-        include=["web_search_call.action.sources"],
-        input=prompt,
-        max_output_tokens=5700
-    )
-    notes = result.output_text.strip()
-    sources = web_sources(result)
-    if len(notes) < 1200 or len(sources) < 4:
-        raise RuntimeError(
-            f"Insufficient grounded web research ({len(notes)} characters, "
-            f"{len(sources)} linked sources). Refusing to publish."
-        )
-    script_prompt = f"""Write ONLY the spoken narration of today's First Light: World Report.
-Date: {stamp}. Target 1,300-1,650 words, an engaging 10-12 minute single-host
-newsroom podcast in natural English. Not a bullet list, no markdown, no URLs and
-no unspoken production labels. A calm but energetic opening, seamless transitions,
-neutral reportage and helpful context. Sections IN ORDER:
-1. Top World Headlines (4-6) 2. Around the World
-3. Business and Markets 4. Science and Tech 5. San Antonio Weather
-6. What to Watch Today and a concise signoff.
-Use ONLY factual claims grounded in the following verified research. No imaginary
-stocks, comparisons, source quotations, or developments. Qualify breaking events,
-distinguish reporting from speculation, and never add figures not in the notes.
-For weather use the live structured weather data instead of news reports.
-If NWS alerts were not verified, do not say there are no alerts.
-Use Fahrenheit and explain rain timing without inventing certainty.
-NEWS RESEARCH:
-{notes}
-SAN ANTONIO WEATHER:
-{json.dumps(weather, ensure_ascii=False)}
-"""
-    generated = client.responses.create(
-        model=MODEL, reasoning={"effort": "low"},
-        input=script_prompt, max_output_tokens=4300
-    )
-    script = re.sub(r"\s+", " ", generated.output_text.strip())
-    words = len(script.split())
-    if words < 1050 or words > 2000:
-        raise RuntimeError(f"Unexpected podcast script length: {words} words")
-    if "San Antonio" not in script:
-        raise RuntimeError("Weather section missing, refusing to publish")
-    return notes, sources, script
+RSS_FEEDS = [
+    ("world", "BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("world", "NPR World", "https://feeds.npr.org/1004/rss.xml"),
+    ("world", "The Guardian World", "https://www.theguardian.com/world/rss"),
+    ("world", "Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+    ("business", "BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
+    ("business", "NPR Business", "https://feeds.npr.org/1006/rss.xml"),
+    ("business", "Guardian Business", "https://www.theguardian.com/uk/business/rss"),
+    ("science", "BBC Science", "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"),
+    ("science", "NPR Science", "https://feeds.npr.org/1007/rss.xml"),
+    ("tech", "BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
+    ("tech", "Guardian Technology", "https://www.theguardian.com/uk/technology/rss"),
+]
 
+def tidy(text, limit=220):
+    text = re.sub(r"<[^>]*>", " ", str(text or ""))
+    text = html.unescape(text)
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit].rsplit(" ", 1)[0] if len(text) > limit else text
 
-def synthesize(script, destination):
-    if len(script) > 39000:
-        raise RuntimeError("Script exceeds ElevenLabs Flash 2.5 request character limit")
-    voice_id = required("ELEVENLABS_VOICE_ID")
-    api_key = required("ELEVENLABS_API_KEY")
-    url = "https://api.elevenlabs.io/v1/text-to-speech/" + voice_id
-    for attempt in range(3):
+def rss_news(now):
+    result = {"world": [], "business": [], "science": [], "tech": []}
+    working = 0
+    allstories = []
+    for section, name, feedurl in RSS_FEEDS:
         try:
-            r = requests.post(
-                url, params={"output_format": "mp3_44100_128"},
-                headers={"xi-api-key": api_key, "Content-Type": "application/json", "Accept": "audio/mpeg"},
-                json={"text": script, "model_id": "eleven_flash_v2_5",
-                      "voice_settings": {"stability": 0.62, "similarity_boost": 0.75,
-                                         "style": 0, "use_speaker_boost": True}},
-                timeout=240
-            )
-            if r.status_code in (429, 500, 502, 503, 504) and attempt < 2:
-                time.sleep((attempt + 1) * 8)
+            resp = requests.get(feedurl, timeout=16,
+                 headers={"User-Agent": "FirstLightPodcast/2.0 (personal news briefing)"})
+            resp.raise_for_status()
+            if len(resp.content) > 2_000_000:
+                raise ValueError("Oversized RSS feed")
+            parsed = feedparser.parse(resp.content)
+            if not parsed.entries:
+                raise ValueError("No stories")
+            working += 1
+            for story in parsed.entries[:18]:
+                title = tidy(story.get("title"), 180)
+                link = story.get("link", "")
+                timestamp = story.get("published_parsed") or story.get("updated_parsed")
+                if not title or not link.startswith("https://") or not timestamp:
+                    continue
+                dt = datetime.fromtimestamp(calendar.timegm(timestamp), timezone.utc)
+                age = (now.astimezone(timezone.utc)-dt).total_seconds()/3600
+                if age < -1 or age > 42:
+                    continue
+                allstories.append({
+                    "category": section, "publisher": name,
+                    "title": title, "summary": tidy(story.get("summary"), 200),
+                    "url": link, "published": dt.isoformat(), "age": age
+                })
+        except (requests.RequestException, ValueError, TypeError, OverflowError) as exc:
+            LOG.warning("Feed %s unavailable: %s", name, exc)
+    if working < 4:
+        raise RuntimeError("Fewer than four working news feeds; no episode published")
+    unique = set()
+    for group in result:
+        count_per_source = {}
+        for story in sorted((s for s in allstories if s["category"]==group),
+                             key=lambda x: x["age"]):
+            identity = re.sub(r"[^a-z0-9]", "", story["title"].lower())[:85]
+            if identity in unique or count_per_source.get(story["publisher"],0)>=4:
                 continue
-            r.raise_for_status()
-            if (not r.content.startswith((b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"))
-                    or len(r.content) < 80_000):
-                raise RuntimeError("Narration response was not a valid-length MP3")
-            destination.write_bytes(r.content)
-            return
-        except requests.Timeout:
-            if attempt == 2:
-                raise
-            time.sleep((attempt + 1) * 8)
+            unique.add(identity)
+            count_per_source[story["publisher"]] = count_per_source.get(story["publisher"],0)+1
+            result[group].append(story)
+            if len(result[group]) >= (9 if group=="world" else 5):
+                break
+    if len(result["world"]) < 5 or len(result["business"]) < 2 or (
+         len(result["science"])+len(result["tech"]) < 2):
+        raise RuntimeError("Too few recent cross-category headlines; no episode published")
+    return result
 
+def selected_stories(groups):
+    return {
+       "Top world headlines": groups["world"][:5],
+       "Around the world": groups["world"][5:8],
+       "Business and markets": groups["business"][:3],
+       "Science and tech": groups["science"][:2] + groups["tech"][:2],
+    }
+
+def weather_narration(w):
+    # Use only weather numbers actually returned by the live weather service.
+    statement = (
+        f"Turning home to San Antonio: the current temperature is around "
+        f"{round(w['temperature_f'])} degrees, with {w['conditions']}. "
+        f"Today's high is near {round(w['high_f'])}, and the low around "
+        f"{round(w['low_f'])}. Forecast maximum rain chance is about "
+        f"{w['max_rain_percent']} percent. "
+    )
+    if w["highest_rain_chance_hours"] and w["max_rain_percent"]>=20:
+        hour=w["highest_rain_chance_hours"][0]["hour_local"]
+        statement+=f"The hourly forecast shows the higher rain chance near {hour} local time. "
+    if w["nws_alert_check"]=="checked":
+        if w["nws_active_alerts"]:
+            statement+="The National Weather Service has active alerts: "+". ".join(w["nws_active_alerts"])+". "
+        else:
+            statement+="No active National Weather Service alert was found at the time of this update. "
+    else:
+        statement+="Official weather warnings could not be verified, so check local alerts. "
+    return statement
+
+def fallback_readout(now, stories, weather):
+    # Fact-limited, original attributed headline roundup if free Gemini unavailable.
+    text=[
+        f"Good morning, San Antonio. Today is {now.strftime('%A, %B %d, %Y')}. "
+        "You're listening to First Light: World Report, your morning window on "
+        "what's happening around the world. The following is a recently published "
+        "headline roundup rather than independent investigative reporting. "
+        "Every story's original source is linked in the episode notes, and "
+        "breaking details may change throughout the day."
+    ]
+    openers={
+        "Top world headlines":"First, the top world headlines.",
+        "Around the world":"Now, some developments from around the world.",
+        "Business and markets":"Turning to business and markets.",
+        "Science and tech":"On to science and technology."
+    }
+    outros=[
+        "The original report contains more background.",
+        "Follow the original source for the latest updates.",
+        "More information may come out as this story develops.",
+        "The source is linked in today's episode notes."
+    ]
+    index=0
+    for section, items in selected_stories(stories).items():
+        text.append(openers[section])
+        for item in items:
+            line=f"{item['publisher']} reports: {item['title'].rstrip('.!')}. "
+            summary=item["summary"].rstrip(".! ")
+            if summary and summary.lower() not in item["title"].lower() and item["title"].lower() not in summary.lower():
+                line+=f"The short news-feed description adds: {tidy(summary,100)}. "
+            line+=outros[index%len(outros)]
+            text.append(line)
+            index+=1
+    text.extend([
+        "For markets, we won't invent index movements, stock prices or futures "
+        "before we can verify the time and figures. The business headlines are "
+        "sourced from recent published reports. On holidays and weekends, "
+        "remember that the last U.S. trading session may be days earlier.",
+        weather_narration(weather),
+        "The stories worth watching today are those still developing. "
+        "Major updates may follow official announcements, market openings, "
+        "new research releases and on-the-ground reporting. "
+        "Revisit the original sources for new facts rather than assuming "
+        "a morning headline tells the entire story.",
+        "Thanks for spending part of your morning with First Light: World Report. "
+        "Stay informed, keep asking questions, and have a great day."
+    ])
+    return re.sub(r"\s+", " ", " ".join(text))
+
+def optional_gemini_script(now, stories, weather):
+    key = os.getenv("GEMINI_API_KEY","").strip()
+    if not key:
+        LOG.info("No Gemini key; using a source-attributed, no-API fallback.")
+        return None
+    # Only public RSS headlines and short excerpts are transmitted to Gemini.
+    # Never send financial/personal information, credentials, or full articles.
+    material={}
+    for section, entries in selected_stories(stories).items():
+        material[section]=[
+           {"publisher":e["publisher"],"title":e["title"],
+            "short_summary":e["summary"],"published":e["published"]}
+           for e in entries
+        ]
+    prompt=f"""Write the complete original 5–7 minute SPOKEN RADIO SCRIPT for
+First Light: World Report dated {now.strftime('%A, %B %d, %Y')}, waking up in
+San Antonio. Target 760–890 spoken words, conversational, clear,
+friendly, professional and politically neutral.
+Return ONLY actual narration: no markdown, bullets, raw links or editorial notes.
+Organize with smooth transitions: top world headlines, around the world,
+business and markets, science and tech, San Antonio weather, what to watch,
+and a concise upbeat signoff. Open with a good morning and full date.
+Base ALL factual claims solely on the attributed RSS source metadata and
+structured weather below. Do not add imagined context, explanations, market
+levels, quotes, speculation, statistics, event outcomes, or timelines.
+Use original wording; do not reproduce article text. Attribute stories
+to publishers. If facts are sparse, be shorter rather than invent facts.
+Do not give U.S. stock index figures because no verified values were supplied.
+If NWS alerts weren't verified, don't claim there aren't any.
+Only use weather numbers supplied below. All temperatures Fahrenheit.
+News:
+{json.dumps(material,ensure_ascii=False)}
+San Antonio live weather:
+{json.dumps(weather,ensure_ascii=False)}
+"""
+    model=os.getenv("GEMINI_MODEL","gemini-2.5-flash-lite")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+",model):
+        LOG.warning("Invalid Gemini model name, using fallback")
+        return None
+    try:
+        response=requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            headers={"x-goog-api-key":key,"Content-Type":"application/json"},
+            json={"contents":[{"parts":[{"text":prompt}]}],
+                  "generationConfig":{"temperature":0.2,"maxOutputTokens":3600}},
+            timeout=100
+        )
+        if response.status_code in (401,403,404,429):
+            LOG.warning("Gemini free tier unavailable, status %s; using fallback",response.status_code)
+            return None
+        response.raise_for_status()
+        data=response.json()
+        script=" ".join(p.get("text","") for p in data["candidates"][0]["content"]["parts"])
+        script=re.sub(r"\s+"," ",script.strip())
+        if not 650 <= len(script.split()) <= 990 or "San Antonio" not in script or "First Light" not in script:
+            LOG.warning("Gemini output failed length/content checks; using fallback")
+            return None
+        return script
+    except (requests.RequestException,ValueError,KeyError,IndexError) as exc:
+        LOG.warning("Gemini unavailable, using fallback: %s",str(exc)[:140])
+        return None
+
+def news_and_script(_client,now,weather):
+    groups=rss_news(now)
+    selected=selected_stories(groups)
+    sources=[
+        {"url":item["url"],"title":item["publisher"]+": "+item["title"]}
+        for section in selected.values() for item in section
+    ]
+    script=optional_gemini_script(now,groups,weather)
+    mode="Gemini free-tier script" if script else "attributed RSS fallback"
+    if script is None:
+        script=fallback_readout(now,groups,weather)
+    LOG.info("News script mode: %s; %s words",mode,len(script.split()))
+    notes="Original sourced headlines and independent local weather. "+mode
+    return notes,sources,script
+
+def _tts_asset(url,path,min_size):
+    if path.exists() and path.stat().st_size>=min_size:
+        return
+    path.parent.mkdir(parents=True,exist_ok=True)
+    tmp=path.with_suffix(".partial")
+    with requests.get(url,stream=True,timeout=120) as r:
+        r.raise_for_status()
+        with tmp.open("wb") as f:
+            for block in r.iter_content(1024*1024):
+                if block:
+                    f.write(block)
+    if tmp.stat().st_size<min_size:
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError("Voice model downloaded incompletely")
+    tmp.replace(path)
+
+def _tts_segments(text, maxlen=230):
+    # Limit each Kokoro utterance to a short phrase/sentence.
+    result=[]
+    current=""
+    for sentence in re.split(r"(?<=[.!?])\s+",text):
+        while len(sentence)>maxlen:
+            boundary=sentence.rfind(" ",0,maxlen)
+            boundary=boundary if boundary>70 else maxlen
+            if current:
+                result.append(current)
+                current=""
+            result.append(sentence[:boundary].strip())
+            sentence=sentence[boundary:].strip()
+        if current and len(current)+len(sentence)+1>maxlen:
+            result.append(current)
+            current=""
+        current=(current+" "+sentence).strip()
+    if current:
+        result.append(current)
+    return [x for x in result if x]
+
+def _tts_kokoro(script,destination):
+    import numpy as np
+    import soundfile as sf
+    from kokoro_onnx import Kokoro
+    base="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/"
+    cache=Path.home()/".cache/first-light/kokoro"
+    model=cache/"kokoro-v1.0.int8.onnx"
+    voices=cache/"voices-v1.0.bin"
+    _tts_asset(base+model.name,model,50_000_000)
+    _tts_asset(base+voices.name,voices,100_000)
+    engine=Kokoro(str(model),str(voices))
+    chunks=[]
+    rate=None
+    for segment in _tts_segments(script):
+        wave_data,new_rate=engine.create(segment,voice=os.getenv("KOKORO_VOICE","am_michael"),
+                                         speed=1.05,lang="en-us")
+        if rate is None:
+            rate=new_rate
+        if rate!=new_rate:
+            raise RuntimeError("Speech sample rate mismatch")
+        chunks.append(np.asarray(wave_data,dtype=np.float32).reshape(-1))
+        chunks.append(np.zeros(int(rate*0.12),dtype=np.float32))
+    if not chunks:
+        raise RuntimeError("No Kokoro speech output")
+    sf.write(str(destination),np.concatenate(chunks),rate)
+
+def _tts_piper(script,destination):
+    import wave
+    from piper import PiperVoice
+    model=Path.home()/".cache/first-light/piper/en_US-lessac-medium.onnx"
+    base="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/"
+    _tts_asset(base+model.name,model,10_000_000)
+    _tts_asset(base+model.name+".json",model.with_suffix(".onnx.json"),100)
+    speaker=PiperVoice.load(str(model))
+    with wave.open(str(destination),"wb") as wav:
+        speaker.synthesize_wav(script,wav)
+
+def synthesize(script,destination):
+    """Local CPU TTS only. Never calls ElevenLabs."""
+    wav=WORK/"narration.wav"
+    try:
+        _tts_kokoro(script,wav)
+        LOG.info("Using free local Kokoro voice")
+    except Exception as err:
+        LOG.warning("Kokoro unavailable (%s), falling back to free Piper",str(err)[:150])
+        _tts_piper(script,wav)
+    subprocess.run(["ffmpeg","-nostdin","-y","-hide_banner","-loglevel","error",
+                    "-i",str(wav),"-codec:a","libmp3lame","-b:a","112k",str(destination)],
+                    check=True,timeout=240)
+    if destination.stat().st_size < 50_000:
+        raise RuntimeError("Generated audio unexpectedly small")
 
 def run_gh(*args, check=True):
     return subprocess.run(["gh", *args], text=True, capture_output=True, check=check)
@@ -379,15 +603,13 @@ Keep a separate wake-up alarm: publication and iPhone automation are best effort
 def main():
     now = datetime.now(TZ)
     day = now.date().isoformat()
-    for variable in ("OPENAI_API_KEY", "ELEVENLABS_API_KEY",
-                     "ELEVENLABS_VOICE_ID", "GH_TOKEN", "GITHUB_REPOSITORY"):
+    for variable in ("GH_TOKEN", "GITHUB_REPOSITORY"):
         required(variable)
     WORK.mkdir(parents=True, exist_ok=True)
     SITE.mkdir(parents=True, exist_ok=True)
 
     weather = fetch_weather(now)
-    client = OpenAI(api_key=required("OPENAI_API_KEY"), timeout=160, max_retries=2)
-    research, sources, script = news_and_script(client, now, weather)
+    research, sources, script = news_and_script(None, now, weather)
     sources += [
         {"title": "Open-Meteo San Antonio weather", "url": "https://open-meteo.com/en/docs"},
         {"title": "National Weather Service alerts", "url": "https://api.weather.gov/alerts/active"}
