@@ -309,7 +309,7 @@ partial or deferred.
 
 ## Package 2+.5: reliability and editorial depth
 
-[Full feature list and acceptance plan](PACKAGE2PLUS_ROADMAP.md#package-25-reliability-and-editorial-quality-ci-pending)
+[Full feature list and acceptance plan](PACKAGE2PLUS_ROADMAP.md)
 
 Package 2+.5 adds a bounded GitHub release-memory retry with a public seven-day
 Pages `memory.json` recovery file (after the first successful new-version
