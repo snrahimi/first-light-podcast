@@ -1,60 +1,46 @@
-# First Light: World Report 🎧
+# First Light: World Report 🎙️ Free Edition
 
-An automatically generated, AI-narrated daily world news podcast made for a 5:00 AM wake-up in San Antonio, Texas.
+Automated 5–7-minute morning world news, business, science, technology and San Antonio weather podcast. Scheduled for 3:30 AM America/Chicago to prepare ahead of 5 AM.
 
-**Status:** Source code deployed. To begin producing audio, finish the one-time settings below. It is *not live* until an Actions run completes and the podcast feed is published.
+**This active daily workflow does not call paid OpenAI or ElevenLabs APIs.** It uses public news RSS feeds, local Kokoro speech (Piper backup), and optionally Gemini API's Free tier to write a better broadcast script.
 
-## What it does
+## Add your optional Gemini Free tier key
 
-Every day at **3:45 AM America/Chicago**, a GitHub Actions workflow researches the latest news using OpenAI's Responses API with web search, retrieves San Antonio weather from Open-Meteo and NWS, writes an original spoken-word script, synthesizes MP3 narration via ElevenLabs, and publishes an RSS feed, episode transcript, source links and a lightweight website through GitHub Pages. Episode MP3s are archived in GitHub Releases. News coverage: top world headlines, around the world, business and markets, science and tech, and San Antonio weather.
+1. Open Google AI Studio: https://aistudio.google.com/apikey
+2. Select or create a project with Gemini API Free tier access. Check the project's billing status. Do not enable paid billing if your goal is zero cost.
+3. Create an API key and copy it.
+4. Open this repository's GitHub Actions Secrets: https://github.com/snrahimi/first-light-podcast/settings/secrets/actions
+5. Choose New repository secret. Enter the exact name GEMINI_API_KEY and paste your key into the secret value. Save.
+6. Never paste the key into chat, Issues, README files, public code, or GitHub Variables.
 
-**Important:** Scheduled cloud jobs may run late, APIs can fail, and phone automations aren't guaranteed to activate exactly on time. Keep a separate iPhone wake-up alarm. The workflow fails instead of publishing stale audio when new research or narration fails.
+The workflow uses model gemini-2.5-flash-lite by default and prompts for approximately 760–890 spoken words. It passes only public RSS headline/summary text and public weather data to Gemini. No private information is sent.
 
-## One-time activation
+If Gemini quota is exhausted, the model is unavailable, or the key is absent, a simpler, attributed, no-API script is used automatically. The fallback is less polished and might be shorter than 5 minutes. The spoken episode still uses free local narration.
 
-1. In this repository, go to **Settings → Secrets and variables → Actions**. Add three **repository secrets**:
-   - `OPENAI_API_KEY` from [OpenAI API](https://platform.openai.com/api-keys) (separate API billing from ChatGPT)
-   - `ELEVENLABS_API_KEY` from [ElevenLabs](https://elevenlabs.io/)
-   - `ELEVENLABS_VOICE_ID` for your chosen ElevenLabs English narration voice
-2. Go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
-3. Go to **Actions → First Light Daily Podcast → Run workflow**. This performs a *paid real API run*. Verify it finishes successfully. If the run fails, open its logs; no episode is published when the job fails.
-4. Once successful, listen at **https://snrahimi.github.io/first-light-podcast/**. The feed is **https://snrahimi.github.io/first-light-podcast/feed.xml**, newest MP3 **https://snrahimi.github.io/first-light-podcast/latest.mp3**, and machine-readable metadata **https://snrahimi.github.io/first-light-podcast/latest.json**.
-5. On iPhone, **Podcasts → Library → … → Follow a Show by URL**, and paste the feed URL. This is for browsing episodes; following a show is **not** enough to make it start playing at 5 AM.
-6. In iPhone **Shortcuts → Automation → Time of Day**, set **5:00 AM / Daily / Run Immediately** (if offered). Add actions to fetch `latest.json`, compare its `date` to today's date in `yyyy-MM-dd`, and if equal, fetch `audio_url` and `Play Sound`. If not equal, have the shortcut speak a short unavailable notice. Configure speaker volume and test with the phone locked. See the detailed steps below.
+Google may use Gemini Free tier content to improve products under its terms. A key attached to a paid Gemini project could incur charges; use a Free tier project and check the usage dashboard. Current info: https://ai.google.dev/gemini-api/docs/pricing
 
-**Secrets must never be pasted into this public repository or chat.** The connected ChatGPT GitHub app cannot configure repository secrets or the Pages source. Only you can perform those GitHub settings steps.
+## First episode
 
-## Detailed iPhone Shortcut
+1. Enable GitHub Pages at https://github.com/snrahimi/first-light-podcast/settings/pages and select GitHub Actions as its build source.
+2. Open https://github.com/snrahimi/first-light-podcast/actions/workflows/daily.yml and choose Run workflow.
+3. Check the workflow logs and verify that a fresh GitHub Release contains an MP3. A production run can fail if RSS/voice model downloads are unreachable, source coverage is sparse, or Pages hasn't been configured.
+4. Once successfully deployed, visit https://snrahimi.github.io/first-light-podcast/ and check https://snrahimi.github.io/first-light-podcast/feed.xml
 
-The goal is to avoid waking up to yesterday's episode when an API service is down.
+## iPhone wake-up playback
 
-- New personal automation: **Time of Day / 5:00 AM / Daily / Run Immediately**.
-- Action **URL** → `https://snrahimi.github.io/first-light-podcast/latest.json`.
-- Action **Get Contents of URL**. This should be parsed as a Dictionary.
-- Action **Get Dictionary Value** for key `date`. Save that value or use it in the following comparison.
-- Action **Current Date** → **Format Date** with format `yyyy-MM-dd`.
-- Action **If** the downloaded `date` equals the formatted date:
-  - **Get Dictionary Value** `audio_url` from the first downloaded dictionary;
-  - **Get Contents of URL** for that URL;
-  - **Set Volume** to your preferred volume, then **Play Sound** with downloaded audio.
-- **Otherwise**, **Speak Text**: "Today's First Light report isn't ready yet. Your regular alarm will still sound."
-- Turn off any confirmation prompt, test once from inside Shortcuts and once as a real timed automation while the phone is locked. Allow network access where prompted and verify that your output speaker isn't unexpectedly routed to Bluetooth.
+Add a Daily 5:00 AM personal automation in Apple Shortcuts. Retrieve https://snrahimi.github.io/first-light-podcast/latest.json, verify the date matches today in San Antonio, download audio_url, set volume and Play Sound. Test on a locked phone with your actual audio routing. Keep a separate phone alarm: GitHub scheduling or iOS automations may run late or fail.
 
-Optionally, add a second **4:55 AM** automation that checks `latest.json`, downloads today's audio, and saves it locally before the playback automation. That improves reliability with weak morning Wi-Fi but adds iPhone setup complexity.
+## How the audio is produced
 
-## Costs and privacy
+- Live headlines from BBC, NPR, Guardian and Al Jazeera news RSS, with date filters and linked sources; no copied full articles.
+- Local San Antonio forecast from Open-Meteo plus an attempted National Weather Service alert check.
+- Original narration generated using optional Free tier Gemini API or a simple attributed headline fallback.
+- Open-source local Kokoro 82M ONNX speech with Piper TTS fallback, encoded to MP3 with ffmpeg.
+- Episode archives in GitHub Releases, a podcast RSS feed and website in GitHub Pages.
+- All GitHub Pages and Releases podcast content is **public**, not a private feed.
 
-- OpenAI developer API/web search and ElevenLabs speech synthesis are separately metered services. A roughly 1,500-word daily episode could use around 250,000–350,000 TTS characters per month. Review API pricing and set spend limits before activating.
-- **This repository and the GitHub Pages / Releases content are public.** Podcast feed URLs are not private or password-protected.
-- The narration is AI-generated and can make mistakes. News sources appear in the show notes and on the site, and critical reports should be verified in their original sources.
+The old manual ElevenLabs narrator test workflow remains available but is not scheduled. Paid API secrets are not used by the daily workflow; remove them from GitHub if you no longer need them.
 
-## How it works
+## Important limits
 
-- `.github/workflows/daily.yml`: schedule, test and publish workflow.
-- `src/first_light.py`: research, weather, script, narration, RSS and web publishing.
-- `tests/test_first_light.py`: offline smoke tests without paid API calls.
-- `requirements.txt`: Python dependencies.
-
-Local tests: `python -m unittest discover -s tests -v`.
-
-This automated audio pipeline is separate from the preexisting ChatGPT scheduled *text* briefing. You may pause the text task later if you only want audio.
+Free Gemini quotas/models can change. Free services can throttle or fail. A public news headline feed is not independently fact-checked, and the AI script can contain inaccuracies, so verify consequential reports with the linked original outlets. Publisher terms govern use of their feeds. GitHub Actions public-repository runner usage is normally free within GitHub's current terms, and the repository contents are public.
