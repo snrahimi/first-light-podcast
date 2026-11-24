@@ -112,7 +112,7 @@ def primary_rss_candidates(now, get=requests.get):
                     "category": category,
                     "publisher": publisher,
                     "title": title,
-                    "summary": clean(entry.get("summary"), 180),
+                    "summary": clean(entry.get("summary"), 260),
                     "url": link,
                     "published": published.isoformat(),
                     "age": age,
@@ -245,7 +245,7 @@ def claim_items(story):
     claims = []
     for idx, source in enumerate(sources):
         for part in ("title", "summary"):
-            statement = clean(source.get(part), 195)
+            statement = clean(source.get(part), 240)
             if len(statement) < 12 or any(
                 x["source_url"] == source["url"] and x["evidence"] == statement
                 for x in claims
@@ -337,7 +337,7 @@ def validate_dossiers(dossiers):
                 )
                 if source is None:
                     raise ValueError("Claim lacks its linked publisher source")
-                excerpt = clean(source.get(claim["evidence_field"]), 195)
+                excerpt = clean(source.get(claim["evidence_field"]), 240)
                 if excerpt != claim["evidence"] or excerpt != claim["claim"]:
                     raise ValueError("Claim not traceable to original source metadata")
                 if not host_ok(claim["source_url"], (urlsplit(claim["source_url"]).hostname,)):
