@@ -361,7 +361,7 @@ def speaking_text(script):
     words = {
         r"\bNWS\b": "National Weather Service",
         r"\bGDP\b": "gross domestic product",
-        r"\bU\.S\.\b": "United States",
+        r"\bU\.S\.(?=\s|$)": "United States",
         r"\bEU\b": "European Union",
         r"\bAI\b": "artificial intelligence",
         r"\bWHO\b": "World Health Organization",
