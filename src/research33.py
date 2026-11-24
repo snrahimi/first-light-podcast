@@ -76,8 +76,8 @@ def _issuer_matches(url, publisher):
     return path.startswith(allow[1])
 
 
-def get_official_excerpt(url, publisher, get=requests.get):
-    """One eligible public NASA/BLS web page, with no redirects or PDFs.
+def get_official_excerpt(url, publisher, get=requests.get, headline=None):
+    """One eligible public agency web page, with no redirects or PDFs.
 
     The source link is already from an agency feed and is rechecked here.
     No third-party publisher body text is read. This is a small excerpt,
@@ -113,7 +113,22 @@ def get_official_excerpt(url, publisher, get=requests.get):
             LOG.info("Agency context page had no extractable paragraphs: %s",
                      publisher)
             return None
-        # Keep excerpts of *agency* reporting rather than the whole page.
+        if headline:
+            # Agency pages occasionally combine unrelated briefs. Attach
+            # only paragraphs that visibly share the selected headline's
+            # meaningful subject tokens; never supply unrelated paragraphs
+            # as if they substantiated the selected event.
+            tokens = editorial.key_tokens(headline)
+            paragraphs = [
+                paragraph for paragraph in paragraphs
+                if len(tokens & editorial.key_tokens(paragraph)) >= 2
+            ][:8]
+            if not paragraphs:
+                LOG.info("Official document has no headline-matched excerpts: %s",
+                         publisher)
+                return None
+        # Keep short snippets of the issuing agency's own report, not the
+        # full page or unrelated stories from a shared press-release listing.
         text = " ".join(paragraphs[:8])[:MAX_CONTEXT_CHARS]
         text = text.rsplit(" ", 1)[0].strip() if len(text) == MAX_CONTEXT_CHARS else text
         if len(text) < 100:
@@ -310,7 +325,8 @@ def enrich_dossiers(dossiers, get=requests.get):
                 fetched += 1
                 dossier["official_page_fetches_attempted"] += 1
                 context = get_official_excerpt(
-                    source["url"], source["publisher"], get=get
+                    source["url"], source["publisher"], get=get,
+                    headline=source["title"],
                 )
                 if context:
                     dossier["official_context"].append(context)
