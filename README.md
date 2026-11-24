@@ -370,9 +370,13 @@ as **GitHub Actions repository secrets**. The source code never reads or
 prints their values. Do not move them into repository variables or source
 files. In GitHub Actions, open **ElevenLabs Voice Audition (Manual Only)**,
 select **main**, and click **Run workflow**. From the completed workflow,
-download the artifact `first-light-elevenlabs-private-sample`, containing
+download the artifact `first-light-elevenlabs-review-sample`, containing
 an MP3, example script and credit-safe metadata. The artifact expires
-after **one day**. The daily workflow is unchanged.
+after **one day**. In a **public GitHub repository**, authenticated GitHub users
+with repository read access may be able to download this sample. It is
+not distributed via the podcast feed, Pages or Releases. The sample
+includes a required ElevenLabs attribution file. The daily workflow
+is unchanged.
 
 The test uses `eleven_flash_v2_5` and MP3 44.1kHz/128kbps, which is
 normally available on the free tier when the selected voice is eligible.
@@ -384,7 +388,7 @@ Each run still consumes free credits (typically 0.5-1 credit per
 character depending on model/account pricing).
 
 **License:** Free-plan generated speech is restricted to **noncommercial
-use with attribution**. This is a private evaluation only, not approved
+use with attribution**. This is a noncommercial voice evaluation only, not approved
 for distribution or monetization. To use ElevenLabs in the published
 First Light podcast, first verify the selected voice's commercial
 license and pay for the appropriate plan. A separate reviewed change
