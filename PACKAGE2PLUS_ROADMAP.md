@@ -82,7 +82,7 @@ existing live production evidence. "Partial" means only some safeguards exist.
 | F. Audio/pronunciation QA | Partial 2+.3 | Common official acronyms and MP3 integrity checks; no full proper-name QA or automated clipping scan |
 | G. Rolling 30-day quality report | Implemented 2+.4 | Completeness, Charon duration, fallback, official page and text-request metrics only for releases with health metadata |
 
-## Package 2+.5: Reliability and editorial quality (CI pending)
+## Package 2+.5: Reliability and editorial quality (CI passed, live pending)
 
 **Motivation:** November 24 live run #45467360399 published a 248.5-second
 Charon episode with 641 fallback words. The Gemini world writer exhausted
@@ -134,7 +134,7 @@ remains the only speech provider.
 
 ### Package 2+.5 acceptance tests
 
-- Offline unit tests cover 503 recovery; non-retryable 403 with Pages backup;
+- Offline CI: 106 tests passed in PR #14. Unit tests cover 503 recovery; non-retryable 403 with Pages backup;
   malformed or stale memory; editorial diversity and business relevance;
   source-restricted fallback; bounded model retries; current versus archived
   RSS media selection.
