@@ -136,6 +136,17 @@ class PrimaryResearchTests(unittest.TestCase):
         self.assertNotIn("source_text", str(out))
         self.assertIn("not_independently_verified", str(out))
 
+    def test_un_press_release_issuer_restricted(self):
+        url = "https://press.un.org/en/2026/sgsm-example.doc.htm"
+        self.assertTrue(research33._issuer_matches(
+            url, "United Nations Press Releases"))
+        self.assertFalse(research33._issuer_matches(
+            "https://press.un.org.attacker.example/en/2026/report",
+            "United Nations Press Releases"))
+        self.assertFalse(research33._issuer_matches(
+            "https://press.un.org/not-news/report",
+            "United Nations Press Releases"))
+
     def test_only_three_official_retrievals_per_edition(self):
         d = {"Science": [nasa_dossier() for _ in range(8)]}
         calls = []
