@@ -25,7 +25,11 @@ from zoneinfo import ZoneInfo
 import requests
 import calendar
 import feedparser
-from src import editorial
+# Support both "python -m src.first_light" and direct script execution.
+if __package__:
+    from . import editorial
+else:
+    import editorial
 import base64
 import io
 import wave
