@@ -151,7 +151,11 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         return None, {"reason": "no script key", "provider_calls": 0}
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", model or ""):
         return None, {"reason": "invalid model", "provider_calls": 0}
-    from . import newsroom3, research33
+    if __package__:
+        from . import newsroom3, research33
+    else:
+        import newsroom3
+        import research33
     dossiers_material = research33.enrich_writer_material(
         dossiers, newsroom3.writer_material(dossiers)
     )
