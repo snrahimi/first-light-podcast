@@ -63,10 +63,32 @@ def public_base():
     return "https://" + owner.lower() + ".github.io" + suffix
 
 
-def http_json(url, *, params=None, headers=None, timeout=20):
-    r = requests.get(url, params=params, headers=headers, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+def http_json(url, *, params=None, headers=None, timeout=(10, 25), attempts=3):
+    """Retry transient weather/network errors without retrying bad requests.
+
+    The connect/read timeouts are separate so an unreliable API cannot hang
+    indefinitely. A transient timeout should never cancel the entire episode.
+    """
+    if attempts < 1:
+        raise ValueError("attempts must be positive")
+    for attempt in range(attempts):
+        try:
+            response = requests.get(
+                url, params=params, headers=headers, timeout=timeout
+            )
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as exc:
+            if isinstance(exc, requests.HTTPError):
+                status = getattr(exc.response, "status_code", None)
+                if status is not None and status not in (408, 429) and status < 500:
+                    raise
+            if attempt == attempts - 1:
+                raise
+            delay = min(3 * (attempt + 1), 8)
+            LOG.warning("Weather request temporary failure, retry %s/%s in %ss: %s",
+                        attempt + 1, attempts - 1, delay, type(exc).__name__)
+            time.sleep(delay)
 
 
 WMO = {
@@ -79,59 +101,141 @@ WMO = {
 }
 
 
-def fetch_weather(now):
-    day = now.date().isoformat()
-    data = http_json(
-        "https://api.open-meteo.com/v1/forecast",
-        params={
-            "latitude": 29.4241, "longitude": -98.4936,
-            "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
-            "hourly": "precipitation_probability",
-            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-            "temperature_unit": "fahrenheit", "wind_speed_unit": "mph",
-            "timezone": "America/Chicago", "forecast_days": 2
-        }
+def _weather_unavailable(now):
+    """Explicit missing values keep the script from making up weather facts."""
+    return {
+        "location": "San Antonio, Texas",
+        "date": now.date().isoformat(),
+        "source": "unavailable",
+        "conditions": None,
+        "temperature_f": None,
+        "feels_like_f": None,
+        "wind_mph": None,
+        "high_f": None,
+        "low_f": None,
+        "max_rain_percent": None,
+        "peak_rain_chance_hours": [],
+        "nws_alert_check": "not verified",
+        "nws_active_alerts": [],
+    }
+
+
+def _nws_weather_backup(now):
+    """Use official NWS period forecasts if Open-Meteo cannot be reached.
+
+    NWS temperatures are *forecasts*, not current measured observations.
+    """
+    headers = {
+        "Accept": "application/geo+json",
+        "User-Agent": "FirstLightPodcast/2.0 (daily San Antonio news briefing)",
+    }
+    points = http_json(
+        "https://api.weather.gov/points/29.4241,-98.4936",
+        headers=headers, timeout=(8, 12), attempts=2
     )
-    if data["daily"]["time"][0] != day:
-        raise RuntimeError("Weather date mismatch, not publishing")
-    hourly = data["hourly"]
+    forecast_url = points["properties"]["forecast"]
+    if (urlsplit(forecast_url).scheme != "https"
+            or urlsplit(forecast_url).hostname != "api.weather.gov"):
+        raise ValueError("Unexpected NWS forecast URL")
+    forecast = http_json(
+        forecast_url, headers=headers, timeout=(8, 15), attempts=2
+    )
     periods = [
-        {"hour_local": hour[-5:], "rain_percent": chance}
-        for hour, chance in zip(hourly["time"], hourly["precipitation_probability"])
-        if hour.startswith(day) and chance is not None
+        p for p in forecast.get("properties", {}).get("periods", [])
+        if datetime.fromisoformat(p["startTime"]).astimezone(TZ).date() == now.date()
     ]
-    periods.sort(key=lambda p: p["rain_percent"], reverse=True)
-    alert_status = "not verified"
-    alerts = []
+    if not periods:
+        raise ValueError("No NWS forecast periods for today's date")
+    daytime = next((p for p in periods if p.get("isDaytime")), None)
+    nighttime = next((p for p in periods if not p.get("isDaytime")), None)
+    def fahrenheit(period):
+        if not period or period.get("temperatureUnit") != "F":
+            return None
+        value = period.get("temperature")
+        return value if isinstance(value, (int, float)) else None
+    precip = [
+        p.get("probabilityOfPrecipitation", {}).get("value")
+        for p in periods
+    ]
+    precip = [p for p in precip if isinstance(p, (int, float))]
+    weather = _weather_unavailable(now)
+    weather.update({
+        "source": "NWS period forecast",
+        "conditions": (daytime or periods[0]).get("shortForecast"),
+        "high_f": fahrenheit(daytime),
+        "low_f": fahrenheit(nighttime),
+        "max_rain_percent": max(precip) if precip else None,
+    })
+    LOG.info("Using National Weather Service forecast backup for San Antonio")
+    return weather
+
+
+def fetch_weather(now):
+    """Retrieve weather with retries, a second provider, and safe missing data."""
+    day = now.date().isoformat()
+    params = {
+        "latitude": 29.4241, "longitude": -98.4936,
+        "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
+        "hourly": "precipitation_probability",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+        "temperature_unit": "fahrenheit", "wind_speed_unit": "mph",
+        "timezone": "America/Chicago", "forecast_days": 2,
+    }
+    try:
+        data = http_json(
+            "https://api.open-meteo.com/v1/forecast",
+            params=params, timeout=(10, 25), attempts=3
+        )
+        if data["daily"]["time"][0] != day:
+            raise ValueError("Weather date did not match the production day")
+        hourly = data["hourly"]
+        periods = [
+            {"hour_local": hour[-5:], "rain_percent": chance}
+            for hour, chance in zip(hourly["time"], hourly["precipitation_probability"])
+            if hour.startswith(day) and chance is not None
+        ]
+        periods.sort(key=lambda p: p["rain_percent"], reverse=True)
+        weather = _weather_unavailable(now)
+        weather.update({
+            "source": "Open-Meteo",
+            "conditions": WMO.get(data["current"].get("weather_code"), "not available"),
+            "temperature_f": data["current"].get("temperature_2m"),
+            "feels_like_f": data["current"].get("apparent_temperature"),
+            "wind_mph": data["current"].get("wind_speed_10m"),
+            "high_f": data["daily"]["temperature_2m_max"][0],
+            "low_f": data["daily"]["temperature_2m_min"][0],
+            "max_rain_percent": data["daily"]["precipitation_probability_max"][0],
+            "peak_rain_chance_hours": periods[:4],
+        })
+    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as exc:
+        LOG.warning("Open-Meteo weather unavailable (%s). Trying NWS backup.", type(exc).__name__)
+        try:
+            weather = _nws_weather_backup(now)
+        except (requests.RequestException, KeyError, IndexError,
+                TypeError, ValueError) as backup_exc:
+            LOG.warning("NWS forecast backup unavailable (%s). "
+                        "Broadcast will explicitly report weather as unavailable.",
+                        type(backup_exc).__name__)
+            weather = _weather_unavailable(now)
     try:
         nws = http_json(
             "https://api.weather.gov/alerts/active",
             params={"point": "29.4241,-98.4936"},
             headers={
                 "Accept": "application/geo+json",
-                "User-Agent": "FirstLightPodcast/1.0 (daily podcast)"
+                "User-Agent": "FirstLightPodcast/2.0 (daily San Antonio news briefing)"
             },
-            timeout=12
+            timeout=(8, 12), attempts=2
         )
-        alert_status = "checked"
-        alerts = [
+        weather["nws_alert_check"] = "checked"
+        weather["nws_active_alerts"] = [
             f.get("properties", {}).get("headline", "NWS alert")
             for f in nws.get("features", [])[:5]
         ]
-    except (requests.RequestException, KeyError, ValueError) as exc:
-        LOG.warning("NWS alert check unavailable: %s", exc)
-    return {
-        "location": "San Antonio, Texas", "date": day,
-        "conditions": WMO.get(data["current"].get("weather_code"), "not available"),
-        "temperature_f": data["current"].get("temperature_2m"),
-        "feels_like_f": data["current"].get("apparent_temperature"),
-        "wind_mph": data["current"].get("wind_speed_10m"),
-        "high_f": data["daily"]["temperature_2m_max"][0],
-        "low_f": data["daily"]["temperature_2m_min"][0],
-        "max_rain_percent": data["daily"]["precipitation_probability_max"][0],
-        "peak_rain_chance_hours": periods[:4],
-        "nws_alert_check": alert_status, "nws_active_alerts": alerts
-    }
+    except (requests.RequestException, KeyError, IndexError,
+            TypeError, ValueError) as exc:
+        LOG.warning("NWS alert check unavailable: %s", type(exc).__name__)
+    return weather
 
 
 def web_sources(response):
@@ -236,25 +340,49 @@ def selected_stories(groups):
     }
 
 def weather_narration(w):
-    # Use only weather numbers actually returned by the live weather service.
-    statement = (
-        f"Turning home to San Antonio: the current temperature is around "
-        f"{round(w['temperature_f'])} degrees, with {w['conditions']}. "
-        f"Today's high is near {round(w['high_f'])}, and the low around "
-        f"{round(w['low_f'])}. Forecast maximum rain chance is about "
-        f"{w['max_rain_percent']} percent. "
-    )
-    if w["peak_rain_chance_hours"] and w["max_rain_percent"]>=20:
-        hour=w["peak_rain_chance_hours"][0]["hour_local"]
-        statement+=f"The hourly forecast shows the higher rain chance near {hour} local time. "
-    if w["nws_alert_check"]=="checked":
-        if w["nws_active_alerts"]:
-            statement+="The National Weather Service has active alerts: "+". ".join(w["nws_active_alerts"])+". "
-        else:
-            statement+="No active National Weather Service alert was found at the time of this update. "
+    """Never invent a number when weather APIs are unreachable."""
+    lines = ["And now, a look at the weather in San Antonio."]
+    source = w.get("source")
+    condition = w.get("conditions")
+    temp = w.get("temperature_f")
+    high = w.get("high_f")
+    low = w.get("low_f")
+    rain = w.get("max_rain_percent")
+    wind = w.get("wind_mph")
+    if source == "unavailable":
+        lines.append(
+            "The live forecast services are temporarily unavailable, "
+            "so I can't confirm today's temperatures or rain chances. "
+            "Please check your local National Weather Service forecast before heading out."
+        )
     else:
-        statement+="Official weather warnings could not be verified, so check local alerts. "
-    return statement
+        if temp is not None:
+            lines.append(f"It's currently around {round(temp)} degrees.")
+        if condition:
+            prefix = "The forecast calls for" if source == "NWS period forecast" else "Conditions are"
+            lines.append(f"{prefix} {condition}.")
+        if high is not None:
+            lines.append(f"Today's forecast high is near {round(high)} degrees.")
+        if low is not None:
+            lines.append(f"The forecast low is near {round(low)}.")
+        if rain is not None:
+            lines.append(f"The maximum forecast chance of rain is about {round(rain)} percent.")
+        if wind is not None:
+            lines.append(f"Winds are near {round(wind)} miles per hour.")
+        if rain is not None and rain >= 20 and w.get("peak_rain_chance_hours"):
+            hour = w["peak_rain_chance_hours"][0]["hour_local"]
+            lines.append(f"The hourly forecast has a higher rain chance near {hour} local time.")
+    if w.get("nws_alert_check") == "checked":
+        alerts = w.get("nws_active_alerts") or []
+        if alerts:
+            lines.append("The National Weather Service lists an active alert: " +
+                         ". ".join(alerts) + ".")
+        else:
+            lines.append("No active National Weather Service alerts were found in this check.")
+    else:
+        lines.append("The official alert feed could not be verified. Check local weather warnings.")
+    return " ".join(lines)
+
 
 def fallback_readout(now, stories, weather):
     # Fact-limited, original attributed headline roundup if free Gemini unavailable.
@@ -334,6 +462,7 @@ Use original wording; do not reproduce article text. Attribute stories
 to publishers. If facts are sparse, be shorter rather than invent facts.
 Do not give U.S. stock index figures because no verified values were supplied.
 If NWS alerts weren't verified, don't claim there aren't any.
+When weather values are null, say they are unavailable and do not invent values.
 Only use weather numbers supplied below. All temperatures Fahrenheit.
 News:
 {json.dumps(material,ensure_ascii=False)}
