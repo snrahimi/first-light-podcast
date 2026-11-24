@@ -107,7 +107,7 @@ class Package26Tests(unittest.TestCase):
                  publisher="United Nations Press Releases", age=1),
             feed("Ukraine peace talks prompt new ceasefire discussions",
                  publisher="United Nations Press Releases", age=2),
-            feed("Brazil announces national transport improvements",
+            feed("Brazil reports renewed regional trade discussions",
                  publisher="BBC World", age=12),
             feed("Japan court reviews regional labor law changes",
                  publisher="NPR World", age=29),
