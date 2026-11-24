@@ -20,7 +20,7 @@ from src.first_light import (
     http_json, fetch_weather, weather_narration, _weather_unavailable,
     _gemini_chunks, _gemini_speech_payload, _tts_gemini,
     inspect_audio, _trusted_feed_link, news_and_script,
-    synthesize, _charon_segment,
+    synthesize, _charon_segment, _charon_429_category,
 )
 
 class PodcastTests(unittest.TestCase):
@@ -159,7 +159,7 @@ class PodcastTests(unittest.TestCase):
                 {"type": "audio", "data": audio}
             ]}]}
         )
-        script = " ".join(("Good morning, San Antonio, here are world news headlines. " * 40).split())
+        script = " ".join(("Good morning, San Antonio, here are world news headlines. " * 100).split())
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ, {"GEMINI_API_KEY": "test-key"}
         ), patch("src.first_light.requests.post", return_value=fake) as post, \
@@ -181,9 +181,9 @@ class PodcastTests(unittest.TestCase):
             destination = Path(temp) / "test.wav"
             with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
                 _tts_gemini("Good morning.", destination)
-            self.assertEqual(post.call_count, 3)
+            self.assertEqual(post.call_count, 2)
             self.assertFalse(destination.exists())
-            self.assertEqual(sleeper.call_count, 2)
+            self.assertEqual(sleeper.call_count, 1)
 
     def test_charon_429_retries_then_recovers(self):
         slow = SimpleNamespace(status_code=429)
@@ -196,6 +196,70 @@ class PodcastTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(post.call_count, 2)
         sleeper.assert_called_once_with(35)
+
+    def test_charon_daily_quota_fails_without_retrying(self):
+        depleted = SimpleNamespace(
+            status_code=429,
+            json=lambda: {"error": {"status": "RESOURCE_EXHAUSTED",
+                     "details": [
+                         {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                          "violations": [{"quotaId":
+                              "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]},
+                         {"@type": "type.googleapis.com/google.rpc.RetryInfo",
+                          "retryDelay": "7200s"}]}},
+        )
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only"}), \
+             patch("src.first_light.requests.post",
+                   return_value=depleted) as post, \
+             patch("src.first_light.time.sleep") as sleeper:
+            with self.assertRaisesRegex(RuntimeError, "quota category=daily"):
+                _charon_segment("Good morning.", 1, 2)
+        post.assert_called_once()
+        sleeper.assert_not_called()
+
+    def test_charon_minute_limit_uses_provider_cooldown(self):
+        short_limit = SimpleNamespace(
+            status_code=429,
+            json=lambda: {"error": {"details": [
+                {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                 "violations": [{"quotaId":
+                                 "GenerateRequestsPerMinutePerProjectPerModel"}]},
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo",
+                 "retryDelay": "41s"}]}},
+        )
+        permitted = SimpleNamespace(status_code=200)
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only"}), \
+             patch("src.first_light.requests.post",
+                   side_effect=[short_limit, permitted]) as post, \
+             patch("src.first_light.time.sleep") as sleeper:
+            result = _charon_segment("Good morning.", 1, 2)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(post.call_count, 2)
+        sleeper.assert_called_once_with(42)
+
+    def test_charon_long_retry_after_fails_fast(self):
+        unavailable = SimpleNamespace(
+            status_code=429,
+            headers={"Retry-After": "3600"},
+            json=lambda: {"error": {"status": "RESOURCE_EXHAUSTED"}},
+        )
+        self.assertEqual(_charon_429_category(unavailable),
+                         ("unknown", 3600.0))
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only"}), \
+             patch("src.first_light.requests.post",
+                   return_value=unavailable) as post, \
+             patch("src.first_light.time.sleep") as sleeper:
+            with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
+                _charon_segment("Good morning.", 1, 2)
+        post.assert_called_once()
+        sleeper.assert_not_called()
+
+    def test_charon_400_word_chunks_reduce_tts_requests(self):
+        from src.first_light import _gemini_chunks
+        intro = "Good morning San Antonio. " * 180  # 720 spoken words
+        chunks = _gemini_chunks(intro)
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(" ".join(chunks), intro.strip())
 
     def test_charon_permanent_http_failure_is_not_retried(self):
         rejected = SimpleNamespace(status_code=403)
