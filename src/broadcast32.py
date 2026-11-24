@@ -74,10 +74,19 @@ def _editorial_beat_plan(material):
             }
             official = card.get("official_context", [])
             is_lead = section == "Top world headlines"
+            # Two RSS headlines do not justify a full five-minute report.
+            # Prefer meaningful source detail: distinct summaries and
+            # official excerpts are more useful than headline counts alone.
+            long_excerpts = sum(
+                len(text.split()) >= 14 for _, text in distinct
+                if isinstance(text, str)
+            )
             budget = min(
-                200 if is_lead else 135,
-                (80 if is_lead else 50) + min(6, len(distinct)) * 19
-                + min(2, len(official)) * 22,
+                220 if is_lead else 160,
+                (65 if is_lead else 42)
+                + min(6, len(distinct)) * (16 if is_lead else 12)
+                + min(4, len(official)) * 24
+                + min(4, long_excerpts) * 13,
             )
             beats.append({
                 "section": section,
@@ -85,6 +94,7 @@ def _editorial_beat_plan(material):
                 "suggested_words_if_supported": budget,
                 "distinct_attributed_excerpts": len(distinct),
                 "official_agency_excerpt_count": len(official),
+                "substantive_source_excerpts": long_excerpts,
                 "editorial_instruction": (
                     "Give priority to this lead: what the source actually "
                     "reports, supported background, and what remains unknown"
@@ -275,9 +285,15 @@ those come from controlled templates.
 
 {assignment}
 
-TARGET UP TO {target} SPOKEN WORDS ONLY WHEN THE PROVIDED EVIDENCE
-SUPPORTS THEM. A shorter, informative section is preferable to unsupported
-filler. Let the supporting excerpts determine the explanation length.
+TARGET UP TO {target} SPOKEN WORDS WHEN THE DISTINCT PROVIDED EVIDENCE
+SUPPORTS THEM. Follow the individual story word budgets proportionately.
+Do not compress four substantial, separately sourced stories into a single
+brief headline sentence each. Where evidence is sufficient, write a clear
+three-step report: attributed development, DIFFERENT supported details,
+and only a source-grounded consequence or next step. Use your word budget
+for those different details, not recurring cautions, rhetorical phrases,
+or repeated headlines. When a story has only a sparse headline or one
+short excerpt, give it less time. Never infer or invent missing context.
 For each story, state (1) the specific attributed development, (2) distinct
 supporting details found in the source excerpts, and (3) a clearly sourced
 explanation of consequences or next steps, ONLY if those are actually stated
@@ -298,6 +314,9 @@ STRICT SOURCE BOUNDARIES:
   impacts, motives, forecasts, implications, event outcomes or named actors.
 - Explain why something matters only when a source excerpt supports it.
 - Never repeat text to meet the word target or disclose invented reporting.
+- Paraphrase attributed findings in original narration: do not quote
+  long verbatim chunks of publisher prose or turn RSS into a copied article.
+- An advisory word budget is not permission to introduce external knowledge.
 - No source URLs spoken aloud and no unsupported sweeping statements.
 - For elections, wars, casualties, sanctions, public-health emergencies
   and breaking incidents, state who reported the claim and when. Never turn
@@ -361,9 +380,9 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
     rest_material = _materials_for(dossiers_material, info["second"])
     world_beats = _editorial_beat_plan(world_material)
     rest_beats = _editorial_beat_plan(rest_material)
-    world_target = min(510, max(330, sum(b["suggested_words_if_supported"]
+    world_target = min(560, max(280, sum(b["suggested_words_if_supported"]
                                          for b in world_beats)))
-    rest_target = min(440, max(280, sum(b["suggested_words_if_supported"]
+    rest_target = min(410, max(210, sum(b["suggested_words_if_supported"]
                                         for b in rest_beats)))
     LOG.info(
         "Phase 3.2 story plan: %d world beats (%d evidence excerpts), "
@@ -443,6 +462,28 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
     )))
     words = len(script.split())
     duration = duration_preflight(words)
+    actual = {"world": len(a.split()), "other": len(b.split())}
+    targets = {"world": world_target, "other": rest_target}
+    evidence = {
+        "world": sum(beat["distinct_attributed_excerpts"]
+                     for beat in world_beats),
+        "other": sum(beat["distinct_attributed_excerpts"]
+                     for beat in rest_beats),
+    }
+    under_delivery = [
+        {"section": part, "words": actual[part], "advisory_target": targets[part],
+         "ratio": round(actual[part] / targets[part], 3),
+         "evidence_excerpts": evidence[part]}
+        for part in ("world", "other")
+        if evidence[part] >= 3 and actual[part] < 0.65 * targets[part]
+    ]
+    for flag in under_delivery:
+        LOG.warning(
+            "Evidence-led Gemini %s section under-delivered: %d/%d words "
+            "with %d distinct source excerpts; no paid length-only retry",
+            flag["section"], flag["words"], flag["advisory_target"],
+            flag["evidence_excerpts"],
+        )
     return script, {
         "provider_calls": count[0],
         "cache_hits": int(a_hit) + int(b_hit),
@@ -456,6 +497,11 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         "method": "two_source_partitioned_segments_plus_deterministic_weather",
         "world_words": len(a.split()),
         "other_words": len(b.split()),
+        "under_delivered_sections": under_delivery,
+        "section_delivery_ratios": {
+            key: round(actual[key] / targets[key], 3)
+            for key in targets
+        },
         "total_words": words,
         "estimated_seconds": duration["estimated_seconds"],
         "target_duration_seconds": [TARGET_MIN_SECONDS, TARGET_MAX_SECONDS],

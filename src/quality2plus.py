@@ -48,6 +48,11 @@ def scorecard(script, dossiers, edition, weather, script_mode):
     words = len(script.split())
     preflight = broadcast32.duration_preflight(words)
     ai_mode = script_mode.startswith("Gemini segmented")
+    writer_flags = (
+        edition.get("script_quality", {}).get("draft", {}).get(
+            "under_delivered_sections", [])
+        if ai_mode else []
+    )
     alert_check = weather.get("nws_alert_check", "not verified")
     official_count = sum(
         len(c.get("official_context", [])) for c in cards
@@ -58,6 +63,9 @@ def scorecard(script, dossiers, edition, weather, script_mode):
         "human_review_completed": False,
         "script_mode": script_mode,
         "gemini_writer_used": ai_mode,
+        "under_delivered_writer_sections": writer_flags,
+        "distinct_lead_publishers": edition.get("distinct_lead_publishers"),
+        "distinct_lead_regions": edition.get("distinct_lead_regions"),
         "selected_stories": len(cards),
         "attributed_excerpt_count": len(claims),
         "distinct_source_links": len(source_links),
@@ -78,7 +86,8 @@ def scorecard(script, dossiers, edition, weather, script_mode):
         "duration_preflight": preflight,
         "passes_automated_provenance_checks": True,
         "needs_editorial_attention": bool(
-            sensitive or discrepancies or _repeated_sentences(script)
+            sensitive or discrepancies or writer_flags
+            or _repeated_sentences(script)
             or not preflight["estimated_in_target"]
             or alert_check != "checked"
         ),
@@ -97,6 +106,9 @@ def public_notes(report):
         f"Attributable RSS/agency excerpts: {report['attributed_excerpt_count']}",
         f"Official document pages: {report['official_pages_inspected']}",
         f"Additional related feed reports: {report['additional_related_reports']}",
+        f"Distinct lead publishers: {report.get('distinct_lead_publishers', 'unknown')}",
+        f"Substantially under-delivered Gemini sections: "
+        f"{len(report['under_delivered_writer_sections'])}",
         f"Potential duplicate sentences: {len(report['possible_repeated_sentences'])}",
         f"Sensitive stories requiring human review: {len(report['sensitive_claims_for_review'])}",
         f"Source-number disagreement flags: {report['differing_report_numbers_for_review']}",

@@ -32,6 +32,11 @@ inflation unemployment jobs employment wages payrolls central banking
 interest rates tariffs trade exports imports recession gdp earnings
 investment regulation supply chains economic economy
 """.split())
+INTERNATIONAL_MARKET_TERMS = frozenset("""
+global international worldwide crossborder exports imports tariffs
+trade markets central monetary inflation currency currencies oil
+energy debt bond bonds supply unemployment recession gdp
+""".split())
 PRIVATE_LUXURY = frozenset("""
 mansion luxury celebrity celebrity-owned penthouse estate villa
 """.split())
@@ -293,6 +298,10 @@ def _rank(cluster, history):
         # Economic policy, markets and employment generally outrank private
         # luxury transactions; never assert that an item is unimportant.
         score += min(2, len(tokens & ECONOMIC_IMPACT)) * 7
+        if tokens & INTERNATIONAL_MARKET_TERMS and tokens & ECONOMIC_IMPACT:
+            # Editorial heuristic: broad macroeconomic relevance beats an
+            # isolated company/product feature when impact is comparable.
+            score += 8
         if tokens & PRIVATE_LUXURY and not tokens & ECONOMIC_IMPACT:
             score -= 14
     # Evidence depth is only a modest tiebreaker. High-impact urgent
@@ -363,6 +372,12 @@ def curate(groups, history, now):
                 penalty = (10 if same_region else 0) + (8 if overlap >= 3 else 0)
                 if prefer_new_region and c["region"] in used_regions:
                     penalty += 7
+                if c["category"] == "world" and peers:
+                    lead_outlets = {p["lead"]["publisher"] for p in peers}
+                    if c["lead"]["publisher"] in lead_outlets:
+                        # Soft penalty, not a ban: a clearly higher-impact
+                        # second story can still come from the same publisher.
+                        penalty += 16
                 return c["score"] - penalty
 
             item = max(available, key=lambda c: (
@@ -440,6 +455,12 @@ def curate(groups, history, now):
         "rundown": presentation,
         "count": sum(len(v) for v in presentation.values()),
         "related_source_count": sum(c["multiple_publishers"] for c in chosen),
+        "distinct_lead_publishers": len({
+            c["lead"]["publisher"] for c in lead
+        }),
+        "distinct_lead_regions": len({
+            c["region"] for c in lead if c["region"] != "other"
+        }),
         "history_items_consulted": len(history),
         "repeated_topics_avoided": sum(c["status"] == "repeat" for c in clusters),
     }
