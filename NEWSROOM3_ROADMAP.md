@@ -91,8 +91,10 @@ consequential reporting.
 - If the result violates source constraints or length/identity requirements,
   it falls back to an attributed, possibly shorter RSS script. Reliability and
   factual restraint are higher priorities than forcing a length.
-- The previously approved Gemini **Charon** narrator remains primary.
-  Local Kokoro FP16 Adam and Piper remain no-cloud backups.
+- Gemini **Charon** is the sole approved published narrator. If speech
+  synthesis is unavailable or hits its quota, the episode is not replaced
+  with Kokoro Adam or Piper. The last good published podcast stays available.
+  The voice service uses bounded transient retries and per-segment pacing.
 
 ### Cost and privacy boundaries
 
@@ -124,8 +126,9 @@ After merging, run a **new** GitHub Actions daily workflow on main and verify:
 - Successful live source fetch and no accidental paid API calls.
 - Expected selection of up to seven topical stories, official primary sources
   used when relevant, and discovery leads *not* read as facts.
-- Charon narrator actually used and audio target of 5–7 minutes where enough
-  supported evidence exists; shorter fallback clearly logged if insufficient.
+- Charon narrator must be used (publication fails otherwise), and audio
+  targets 5–7 minutes where enough supported evidence exists. The script
+  may be shorter when source metadata is sparse.
 - Public evidence.json contains original source URLs and no independently
   verified claim counts unless independently validated evidence exists.
 - GitHub Release assets, RSS and Pages deployment complete successfully.
@@ -134,8 +137,9 @@ After merging, run a **new** GitHub Actions daily workflow on main and verify:
 
 | Next milestone | Focus | Measurable acceptance |
 |---|---|---|
-| 3.1 Live operational hardening | Run post-merge end-to-end test; verify quota and publication timing; maintain incident logs | 30 daily checks, >95% published by 4:45 AM Central |
-| 3.2 Deeper verified context | Contractually permitted full-text/primary records and human-reviewed claim selection | Major explanatory statements traceable to appropriate evidence |
+| 3.1 Charon-only reliability | Reject unapproved voices, space Gemini requests, retry temporary 429/5xx, log sanitized segment failures, verify one new episode | 100% of published episodes use Charon; no silent substitutions |
+| 3.2 Duration and daily availability | Improve source-supported 5–7-minute scripts, alert on missed episode, diagnose free-tier quota, validate publishing by 4:45 AM Central | 30-day delivery ≥95%, audio length 5–7 minutes when evidence supports it |
+| 3.3 Deeper verified context | Contractually permitted full-text/primary records and human-reviewed claim selection | Major explanatory statements traceable to appropriate evidence |
 | 4.0 Listening experience | Beautiful mobile-first site, archives, searchable transcripts, clear source/audit views | 100% episodes have playable audio and source-linked pages |
 | 4.1 Podcast distribution | Check byte-range audio and validate feed for Apple/Spotify | Submission passes platform requirements |
 | 5.0 Listener personalization | Optional city, topics and lengths, without sacrificing basic world coverage | Settings work without collecting unnecessary personal data |

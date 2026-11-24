@@ -23,8 +23,10 @@ scheduled services are available.
   diversity, potential significance, geographic diversity and novelty.
 - Use a radio-style script outline: informative opening, two explained lead
   stories, quick briefs, actionable local weather, and what to watch.
-- Narrate primarily with the **Gemini 3.8 Flash TTS Charon** voice the listener
-  selected. If unavailable, use Kokoro FP16 Adam, then Piper locally.
+- Narrate **only** with the approved **Gemini 3.8 Flash TTS Charon** voice.
+  The daily workflow never substitutes Kokoro Adam or Piper. If Charon is
+  unavailable, publication fails before release or Pages replacement, so
+  the previously published episode remains untouched.
 - Apply safe abbreviation expansions to improve pronunciation without
   inventing pronunciations of international names.
 - Normalize and encode MP3 at **192 kbps**. The automated checks reject
@@ -80,8 +82,10 @@ Do not distribute unlicensed publisher text or copyrighted podcast audio.
   feeds, stored as headline metadata and links.
 - **AI script:** Optional Gemini key (default gemini-3.5-flash-lite with a
   free-tier model alternative). A source-attributed template is the backup.
-- **AI voice:** Gemini 3.8 Flash TTS Charon. Kokoro FP16 Adam and Piper are
-  local backup voices.
+- **AI voice:** Gemini 3.8 Flash TTS Charon is mandatory for publication.
+  Kokoro Adam and Piper are not used automatically. Speech generation is
+  paced between chunks, with at most two retries on transient network
+  errors or HTTP 429/5xx. Provider daily quotas may still prevent an episode.
 - **Weather:** Open-Meteo / National Weather Service.
 - **Hosting:** GitHub Releases MP3 archives and GitHub Pages podcast site.
 - **Schedule:** 3:30 AM America/Chicago; target listen time 5 AM.
@@ -137,3 +141,22 @@ and repeat-avoidance statistics in the public latest.json metadata.
 If a full production run fails, use its GitHub Actions log to distinguish
 source availability, weather outages, Gemini quota, speech production,
 GitHub Release publication and Pages artifact deployment.
+
+## Narrator choice and failure behavior
+
+The listener rejected Kokoro Adam after the first Newsroom 3.0 production run.
+**Charon is now required.** A partially produced Gemini audio file is never
+used as a complete episode; remaining sections must finish. Transient HTTP
+429/5xx and connection errors receive bounded retries. HTTP status and
+segment number are logged without raw API response bodies or secrets. If any
+segment ultimately fails, the run stops before GitHub Release and GitHub
+Pages publication. This preserves the previous podcast rather than silently
+switching narrator. The prior live episode may still use Adam until a new
+successful Charon-only episode replaces it; changing code does not rewrite
+already published audio.
+
+The first Newsroom 3.0 run used Adam because Charon completed only two of
+four segments and then returned an unclassified runtime failure. Those older
+logs did not record the underlying API status. The new logging makes future
+reasons easier to identify. API retries may consume additional Gemini quota;
+confirm free-tier access and billing safeguards outside the repository.
