@@ -1,0 +1,56 @@
+name: First Light Narrator Comparison (Audition Only)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/voice-comparison.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: first-light-voice-audition
+  cancel-in-progress: false
+
+jobs:
+  voice-previews:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install local voice dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y espeak-ng ffmpeg
+          pip install 'requests>=2.32,<3' 'kokoro-onnx>=0.6,<0.7' 'numpy>=1.26,<3' 'soundfile>=0.12'
+
+      - name: Cache FP16 local TTS model
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/first-light/kokoro
+          key: first-light-kokoro-fp16-audition-v1
+
+      - name: Render and publish three voice previews
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: python src/voice_comparison.py
+
+      - name: Upload individual files as a workflow artifact too
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: first-light-voice-previews
+          path: voice-samples/
+          if-no-files-found: warn
+          retention-days: 14
