@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """First Light: World Report daily podcast producer.
 
-OpenAI web search/news script + live weather + ElevenLabs audio + GitHub Releases/Pages.
+Free RSS/Gemini-script news, resilient weather, Gemini Charon narration + local fallback.
 Both episode hosting and source notes are PUBLIC. Never print secrets.
 """
 from __future__ import annotations
@@ -25,6 +25,9 @@ from zoneinfo import ZoneInfo
 import requests
 import calendar
 import feedparser
+import base64
+import io
+import wave
 from PIL import Image, ImageDraw, ImageFont
 
 LOG = logging.getLogger("firstlight")
@@ -570,15 +573,15 @@ def _tts_kokoro(script,destination):
     from kokoro_onnx import Kokoro
     base="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/"
     cache=Path.home()/".cache/first-light/kokoro"
-    model=cache/"kokoro-v1.0.int8.onnx"
+    model=cache/"kokoro-v1.0.fp16.onnx"
     voices=cache/"voices-v1.0.bin"
-    _tts_asset(base+model.name,model,50_000_000)
+    _tts_asset(base+model.name,model,120_000_000)
     _tts_asset(base+voices.name,voices,100_000)
     engine=Kokoro(str(model),str(voices))
     chunks=[]
     rate=None
     for segment in _tts_segments(script):
-        wave_data,new_rate=engine.create(segment,voice=os.getenv("KOKORO_VOICE","am_michael"),
+        wave_data,new_rate=engine.create(segment,voice=os.getenv("KOKORO_VOICE","am_adam"),
                                          speed=1.05,lang="en-us")
         if rate is None:
             rate=new_rate
@@ -601,20 +604,156 @@ def _tts_piper(script,destination):
     with wave.open(str(destination),"wb") as wav:
         speaker.synthesize_wav(script,wav)
 
+def _gemini_chunks(script, max_words=210):
+    """Split at sentence boundaries to avoid very long TTS requests."""
+    if max_words < 40:
+        raise ValueError("max_words too small")
+    chunks = []
+    current = []
+    count = 0
+    for sentence in re.split(r"(?<=[.!?])\s+", script.strip()):
+        if not sentence:
+            continue
+        words = sentence.split()
+        if count and count + len(words) > max_words:
+            chunks.append(" ".join(current))
+            current, count = [], 0
+        if len(words) > max_words:
+            # Rare long sentence: make sure no content is dropped.
+            for start in range(0, len(words), max_words):
+                piece = " ".join(words[start:start + max_words])
+                if current:
+                    chunks.append(" ".join(current))
+                    current, count = [], 0
+                chunks.append(piece)
+            continue
+        current.append(sentence)
+        count += len(words)
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
+
+
+def _gemini_speech_payload(text):
+    """Use exactly the Charon voice and speech metadata that passed the audition."""
+    return {
+        "model": "gemini-3.8-flash-tts",
+        "input": [{
+            "type": "user_input",
+            "content": [{
+                "type": "text",
+                "text": text,
+                "annotations": [{
+                    "type": "speech_metadata",
+                    "style": (
+                        "Read this text verbatim. Warm, natural American morning "
+                        "news presenter, clear diction and calm confidence. "
+                        "Professional, factual delivery. Steady tempo with natural "
+                        "pauses. Do not invent or omit any words."
+                    ),
+                }],
+            }],
+        }],
+        "response_format": {"type": "audio"},
+        "generation_config": {"speech_config": [{"voice": "Charon"}]},
+    }
+
+
+def _tts_gemini(script, destination):
+    """Generate full narration with the previously auditioned Gemini Charon.
+
+    Each Gemini response is standard PCM WAV (RIFF); append matching PCM frames
+    into one file, with brief digital silence to smooth transitions.
+    """
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Gemini API key unavailable")
+    chunks = _gemini_chunks(script)
+    if not chunks:
+        raise RuntimeError("Empty podcast narration")
+    params = None
+    audio_frames = []
+    total_seconds = 0.0
+    for index, text_chunk in enumerate(chunks, 1):
+        response = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json=_gemini_speech_payload(text_chunk),
+            timeout=(12, 160),
+        )
+        if response.status_code != 200:
+            # No paid fallback: if quota/availability blocks Gemini, use local TTS.
+            raise RuntimeError(
+                f"Gemini Charon request {index}/{len(chunks)} returned "
+                f"HTTP {response.status_code}"
+            )
+        data = response.json()
+        parts = [
+            part for step in data.get("steps", [])
+            if step.get("type") == "model_output"
+            for part in step.get("content", []) or []
+            if part.get("type") == "audio" and part.get("data")
+        ]
+        if not parts:
+            raise RuntimeError(f"Gemini Charon returned no audio for chunk {index}")
+        raw = base64.b64decode(parts[-1]["data"], validate=True)
+        if not raw.startswith(b"RIFF"):
+            raise RuntimeError(f"Gemini Charon returned unexpected audio for chunk {index}")
+        with wave.open(io.BytesIO(raw), "rb") as item:
+            if item.getcomptype() != "NONE":
+                raise RuntimeError("Unsupported compressed Gemini WAV")
+            layout = (item.getnchannels(), item.getsampwidth(), item.getframerate())
+            if params is None:
+                params = layout
+            elif layout != params:
+                raise RuntimeError("Gemini audio encoding changed between chunks")
+            if item.getnframes() < item.getframerate() * 3:
+                raise RuntimeError(f"Gemini Charon audio chunk {index} was too short")
+            total_seconds += item.getnframes() / item.getframerate()
+            audio_frames.append(item.readframes(item.getnframes()))
+        LOG.info("Gemini Charon narration segment %s/%s completed", index, len(chunks))
+    if params is None:
+        raise RuntimeError("Gemini Charon created no audio")
+    channels, sample_width, sample_rate = params
+    with wave.open(str(destination), "wb") as output:
+        output.setnchannels(channels)
+        output.setsampwidth(sample_width)
+        output.setframerate(sample_rate)
+        for index, samples in enumerate(audio_frames):
+            if index:
+                output.writeframes(b"\x00" * int(sample_rate * .18) * channels * sample_width)
+            output.writeframes(samples)
+    LOG.info("Gemini Charon finished %s segments, %.0fs spoken audio",
+             len(chunks), total_seconds)
+
+
 def synthesize(script,destination):
-    """Local CPU TTS only. Never calls ElevenLabs."""
-    wav=WORK/"narration.wav"
+    """Prefer Gemini Charon, then higher-fidelity Kokoro FP16, then Piper."""
+    wav = WORK / "narration.wav"
     try:
-        _tts_kokoro(script,wav)
-        LOG.info("Using free local Kokoro voice")
+        _tts_gemini(script, wav)
+        LOG.info("Using chosen Gemini Charon narrator")
     except Exception as err:
-        LOG.warning("Kokoro unavailable (%s), falling back to free Piper",str(err)[:150])
-        _tts_piper(script,wav)
-    subprocess.run(["ffmpeg","-nostdin","-y","-hide_banner","-loglevel","error",
-                    "-i",str(wav),"-codec:a","libmp3lame","-b:a","112k",str(destination)],
-                    check=True,timeout=240)
-    if destination.stat().st_size < 50_000:
-        raise RuntimeError("Generated audio unexpectedly small")
+        # Do not reveal API secrets in exception strings.
+        LOG.warning("Gemini Charon unavailable (%s). Switching to local TTS.",
+                    type(err).__name__)
+        try:
+            _tts_kokoro(script, wav)
+            LOG.info("Using free Kokoro FP16 backup voice")
+        except Exception as local_err:
+            LOG.warning("Kokoro unavailable (%s), switching to Piper",
+                        type(local_err).__name__)
+            _tts_piper(script, wav)
+            LOG.info("Using free Piper backup voice")
+    subprocess.run([
+        "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(wav), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+        "-codec:a", "libmp3lame", "-ar", "44100", "-b:a", "192k",
+        str(destination)
+    ], check=True, timeout=240)
+    if destination.stat().st_size < 65_000:
+        raise RuntimeError("Generated MP3 was unexpectedly small")
+
 
 def run_gh(*args, check=True):
     return subprocess.run(["gh", *args], text=True, capture_output=True, check=check)
