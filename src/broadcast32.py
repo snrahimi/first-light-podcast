@@ -235,7 +235,7 @@ def quality(script, edition, now):
         raise ValueError("Broadcast name or city missing")
     if now.strftime("%Y") not in script:
         raise ValueError("Broadcast date missing")
-    if "AI assistance" not in script:
+    if not re.search(r"\b(?:AI|artificial intelligence) assistance\b", script, re.I):
         raise ValueError("AI assistance disclosure missing")
     if not re.search(r"\b(world|international)\b", script, re.I):
         raise ValueError("World news identifier missing")
