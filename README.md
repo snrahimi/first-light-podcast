@@ -160,3 +160,50 @@ four segments and then returned an unclassified runtime failure. Those older
 logs did not record the underlying API status. The new logging makes future
 reasons easier to identify. API retries may consume additional Gemini quota;
 confirm free-tier access and billing safeguards outside the repository.
+
+## TTS 429 quota diagnostics and efficiency (November 2026)
+
+The first Charon-only Newsroom 3.0 production attempt failed with HTTP 429
+on segment 1/4 three times. News collection, NWS weather backup and the
+evidence-based script fallback all worked. HTTP 429 is a Google-side quota,
+throttling or capacity response, not a Python import or weather bug.
+
+The production workflow now:
+
+- Generates larger sentence-aligned Charon audio sections, default **400 words
+  per request instead of 210** (approximately two calls for a 640-word script).
+  This reduces requests but may need adjustment if the provider changes audio
+  length limits. It does not change the Charon voice/model.
+- Reads structured Google QuotaFailure and RetryInfo metadata, when available,
+  and logs a safe **daily**, **minute**, or **unknown** category.
+- For a known daily limit or cooldown longer than two minutes, **fails fast**
+  rather than repeatedly retrying and consuming more requests.
+- For a possible short-term 429, makes only **one** final retry, honoring a
+  reasonable Retry-After.
+- For network and 5xx failures, retains bounded temporary retries.
+- Preserves previously published material rather than deploying an unapproved
+  narrator. The daily production workflow no longer sets KOKORO_VOICE or
+  downloads/caches local speech models.
+
+To inspect project-specific quota, visit
+https://aistudio.google.com/rate-limit?timeRange=last-28-days and filter to
+Gemini 3.8 Flash TTS, then check RPM, RPD and account tier. Google states
+that quotas apply per **project**, not per key; daily request limits reset at
+**midnight Pacific time** (2 AM Central while both are on standard or
+daylight time). A 429 with no recognizable provider detail remains
+**unknown**, so the logs cannot guarantee which dimension was exhausted.
+Google docs: https://ai.google.dev/gemini-api/docs/rate-limits
+
+**Free-tier guarantee:** NONE. Gemini 3.8 Flash TTS is listed with free-tier
+pricing, but only within the limits assigned to your actual project. If
+billing is enabled, provider requests may be billable. The code does not
+change the project's billing tier and cannot override Google quotas. Avoid
+manual reruns until usage resets; a second API key on the same project does
+not reset quota. Each failed production run still leaves the prior episode
+in place.
+
+**Next acceptance step:** Inspect your AI Studio quota, then start one fresh
+GitHub Actions daily workflow run after the applicable reset. If its new
+log explicitly reports quota category=daily or quota category=minute,
+use that evidence to guide the next change. Do not try an unapproved
+voice or a paid API tier to bypass rate limits.
