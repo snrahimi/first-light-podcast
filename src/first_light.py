@@ -686,14 +686,24 @@ def news_and_script(_client, now, weather):
         )
     script = editorial.speaking_text(script)
     if mode == "Gemini segmented evidence-led 3.2":
-        quality = broadcast32.quality(script, edition, now)
-    else:
+        try:
+            quality = broadcast32.quality(script, edition, now)
+            newsroom3.script_numeric_gate(script, dossiers, weather, now)
+        except ValueError as exc:
+            LOG.warning(
+                "Gemini script failed editorial/evidence acceptance (%s); "
+                "using sourced fallback", str(exc)[:140]
+            )
+            script = editorial.speaking_text(fallback_readout(now, edition, weather))
+            mode = "source-attributed RSS fallback"
+            draft_stats["reason"] = "editorial_or_evidence_gate"
+    if mode != "Gemini segmented evidence-led 3.2":
         quality = {
             "script_words": len(script.split()),
             "fallback_shorter_than_target": True,
             "selected_stories": edition["count"],
         }
-    newsroom3.script_numeric_gate(script, dossiers, weather, now)
+        newsroom3.script_numeric_gate(script, dossiers, weather, now)
     quality["estimated_duration_seconds"] = broadcast32.estimate_duration(len(script.split()))
     quality["expected_target_seconds"] = [300, 420]
     quality["draft"] = draft_stats
