@@ -1,7 +1,6 @@
 name: Report a First Light news correction
 description: Identify a factual or attribution issue in a published episode
 title: "[Correction] "
-labels: ["correction"]
 body:
   - type: markdown
     attributes:
