@@ -351,7 +351,7 @@ def rss_news(now):
                 encountered.add(identity)
                 allstories.append({
                     "category": section, "publisher": name,
-                    "title": title, "summary": tidy(story.get("summary"), 200),
+                    "title": title, "summary": tidy(story.get("summary"), 260),
                     "url": link, "published": dt.isoformat(), "age": age,
                 })
         except (requests.RequestException, ValueError, TypeError, OverflowError) as exc:
@@ -474,7 +474,7 @@ def _source_depth_for_fallback(story, card):
         if claim.get("evidence_field") != "summary":
             continue
         publisher = claim.get("publisher", "")
-        excerpt = tidy(claim.get("evidence", ""), 150)
+        excerpt = tidy(claim.get("evidence", ""), 195)
         low = excerpt.lower()
         if (len(excerpt.split()) < 7 or not publisher or
                 any(low in old or old in low for old in used if old)):
