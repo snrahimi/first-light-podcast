@@ -5,11 +5,17 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import requests
+import base64
+import io
+import tempfile
+import wave
+from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
 from src.first_light import (
     public_base, xml_feed, web_sources, web_page,
-    http_json, fetch_weather, weather_narration, _weather_unavailable
+    http_json, fetch_weather, weather_narration, _weather_unavailable,
+    _gemini_chunks, _gemini_speech_payload, _tts_gemini
 )
 
 class PodcastTests(unittest.TestCase):
@@ -120,6 +126,53 @@ class PodcastTests(unittest.TestCase):
         self.assertEqual(w["low_f"], 53)
         self.assertEqual(w["max_rain_percent"], 10)
         self.assertIsNone(w["temperature_f"])
+
+    def test_gemini_chunks_preserve_script(self):
+        text = " ".join("This sentence has twelve words about the world's headlines today." for _ in range(28))
+        pieces = _gemini_chunks(text, max_words=45)
+        self.assertGreater(len(pieces), 3)
+        self.assertEqual(" ".join(pieces), text)
+        self.assertTrue(all(len(piece.split()) <= 45 for piece in pieces))
+
+    def test_gemini_payload_uses_selected_charon(self):
+        obj = _gemini_speech_payload("Good morning, San Antonio.")
+        self.assertEqual(obj["model"], "gemini-3.8-flash-tts")
+        self.assertEqual(obj["generation_config"]["speech_config"][0]["voice"], "Charon")
+
+    def test_gemini_audio_merges_valid_wave_segments(self):
+        from src.first_light import _tts_gemini
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(24000)
+            wav.writeframes(b"\x00\x00" * 24000 * 4)
+        audio = base64.b64encode(buf.getvalue()).decode("ascii")
+        fake = SimpleNamespace(
+            status_code=200,
+            json=lambda: {"steps": [{"type": "model_output", "content": [
+                {"type": "audio", "data": audio}
+            ]}]}
+        )
+        script = " ".join(("Good morning, San Antonio, here are world news headlines. " * 40).split())
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {"GEMINI_API_KEY": "test-key"}
+        ), patch("src.first_light.requests.post", return_value=fake) as post:
+            dest = Path(temp) / "test.wav"
+            _tts_gemini(script, dest)
+            self.assertTrue(dest.is_file())
+            self.assertGreaterEqual(post.call_count, 2)
+            with wave.open(str(dest), "rb") as joined:
+                self.assertEqual(joined.getframerate(), 24000)
+                self.assertGreater(joined.getnframes(), 24000 * 8)
+
+    def test_gemini_http_failure_does_not_return_audio(self):
+        bad = SimpleNamespace(status_code=429)
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {"GEMINI_API_KEY": "test-key"}
+        ), patch("src.first_light.requests.post", return_value=bad):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
+                _tts_gemini("Good morning.", Path(temp) / "test.wav")
 
 if __name__ == "__main__":
     unittest.main()
