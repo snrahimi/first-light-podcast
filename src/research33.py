@@ -20,9 +20,10 @@ else:
     import editorial
 
 LOG = logging.getLogger("firstlight.research33")
-MAX_DOCUMENTS = 3
+MAX_DOCUMENTS = 4
 MAX_HTML_BYTES = 850_000
-MAX_CONTEXT_CHARS = 1400
+MAX_CONTEXT_CHARS = 1900
+MAX_OFFICIAL_EXCERPTS = 4
 AGENCY_URLS = {
     "NASA News Releases": ("nasa.gov", "/news-release/"),
     "United Nations Press Releases": ("press.un.org", "/en/"),
@@ -34,7 +35,7 @@ class _OfficialParagraphs(HTMLParser):
     """Take visible paragraphs and headings, excluding navigation and code."""
 
     SKIP = {"script", "style", "nav", "footer", "header", "noscript", "svg"}
-    TAKE = {"p", "h1", "h2"}
+    TAKE = {"p", "h1", "h2", "h3", "li"}
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -114,32 +115,55 @@ def get_official_excerpt(url, publisher, get=requests.get, headline=None):
                      publisher)
             return None
         if headline:
-            # Agency pages occasionally combine unrelated briefs. Attach
-            # only paragraphs that visibly share the selected headline's
-            # meaningful subject tokens; never supply unrelated paragraphs
-            # as if they substantiated the selected event.
+            # Prefer the headline-matching heading/paragraph, then allow a
+            # tightly bounded adjacent follow-up which retains at least one
+            # substantive subject token. This captures agency next-steps
+            # without importing other unrelated releases from listing pages.
             tokens = editorial.key_tokens(headline)
-            paragraphs = [
-                paragraph for paragraph in paragraphs
-                if len(tokens & editorial.key_tokens(paragraph)) >= 2
-            ][:8]
+            selected, anchored = [], False
+            for paragraph in paragraphs[:40]:
+                overlap = len(tokens & editorial.key_tokens(paragraph))
+                if overlap >= 2:
+                    selected.append(paragraph)
+                    anchored = True
+                elif anchored and overlap >= 1 and len(selected) < 8:
+                    selected.append(paragraph)
+                elif anchored:
+                    # Stop at the first unrelated paragraph instead of
+                    # reaching into other story blocks on shared pages.
+                    break
+                if len(selected) >= 8:
+                    break
+            paragraphs = selected
             if not paragraphs:
                 LOG.info("Official document has no headline-matched excerpts: %s",
                          publisher)
                 return None
-        # Keep short snippets of the issuing agency's own report, not the
-        # full page or unrelated stories from a shared press-release listing.
-        text = " ".join(paragraphs[:8])[:MAX_CONTEXT_CHARS]
-        text = text.rsplit(" ", 1)[0].strip() if len(text) == MAX_CONTEXT_CHARS else text
+        # Short, exact fragments from an issuing agency, not a full article.
+        # Remove repeated headlines and near-identical paragraphs so the
+        # writer has multiple genuinely distinct statements when available.
+        unique = []
+        for paragraph in paragraphs:
+            reduced = paragraph.lower()
+            if any(reduced in prev.lower() or prev.lower() in reduced
+                   for prev in unique):
+                continue
+            unique.append(paragraph)
+        text = " ".join(unique[:8])[:MAX_CONTEXT_CHARS]
+        if len(text) == MAX_CONTEXT_CHARS:
+            text = text.rsplit(" ", 1)[0].strip()
         if len(text) < 100:
             return None
-        spans = [p[:260].strip() for p in paragraphs[:5] if len(p) >= 35]
+        spans = [p[:245].strip() for p in unique[:8] if len(p) >= 35]
+        excerpts = [p for p in spans if p in text][:MAX_OFFICIAL_EXCERPTS]
+        if not excerpts:
+            return None
         return {
             "publisher": publisher,
             "url": url,
             "source_type": "issuing_agency_page",
             "source_text": text,
-            "excerpts": [p for p in spans if p in text][:3],
+            "excerpts": excerpts,
             "status": "attributed_official_document_not_independently_verified",
         }
     except (requests.RequestException, ValueError, TypeError, UnicodeError) as exc:
@@ -186,8 +210,8 @@ PUBLISHER_FEED_HOSTS = {
     "The Guardian": ("theguardian.com",),
     "Al Jazeera": ("aljazeera.com",),
 }
-MAX_RELATED_LEADS = 2
-MAX_RELATED_OTHER = 1
+MAX_RELATED_LEADS = 3
+MAX_RELATED_OTHER = 2
 
 
 def _trusted_feed_candidate(entry):
@@ -291,7 +315,7 @@ def link_selected_feed_context(dossiers, groups):
                 # Attributed feed excerpts only, never long article content.
                 claims = []
                 for field in ("title", "summary"):
-                    excerpt = newsroom3.clean(item[field], 195)
+                    excerpt = newsroom3.clean(item[field], 240)
                     if len(excerpt) < 12 or any(
                         claim["evidence"] == excerpt for claim in claims
                     ):
@@ -395,6 +419,10 @@ def validate_research(dossiers):
     return {
         "official_documents_checked": validated,
         "official_document_fetches_attempted": attempts,
+        "official_distinct_excerpts": sum(
+            len(doc["excerpts"]) for chapter in dossiers.values()
+            for card in chapter for doc in card.get("official_context", [])
+        ),
         "selected_story_related_feeds": related,
         "independent_fact_checks": 0,
         "comparison": "publisher-excerpt comparison only; numbers require review",
