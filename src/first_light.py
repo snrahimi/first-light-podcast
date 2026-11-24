@@ -1174,6 +1174,10 @@ def main():
     )
     mp3 = WORK / f"first-light-{day}.mp3"
     narrator = synthesize(script, mp3)
+    if narrator != "Gemini Charon":
+        raise RuntimeError(
+            "Unapproved narrator refused: only Gemini Charon may be published"
+        )
     audio_stats = inspect_audio(mp3)
     edition["narrator"] = narrator
     edition["audio_quality"] = audio_stats
