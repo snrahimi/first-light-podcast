@@ -27,13 +27,14 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus
 else:
     import editorial
     import newsroom3
     import research33
     import broadcast32
     import quality2plus
+    import monitor2plus
 import base64
 import io
 import wave
@@ -1184,6 +1185,87 @@ def run_gh(*args, check=True):
     return subprocess.run(["gh", *args], text=True, capture_output=True, check=check)
 
 
+def release_revision_notes(previous_body, *, now=None):
+    """Explicitly disclose regenerated same-date episodes.
+
+    Release tags retain only their latest MP3. Revision history records
+    the replacement event but cannot recover an older overwritten asset.
+    Human corrections must still be documented and reviewed separately.
+    """
+    stamp = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    marker = re.search(
+        r"<!-- FIRST_LIGHT_REVISION_V1:(\d{1,4}) -->",
+        previous_body or "",
+    )
+    revision = min(9999, int(marker.group(1)) + 1) if marker else 2
+    lines = re.findall(
+        r"(?m)^- Revision \d{1,4}: [^\n]{1,450}$",
+        previous_body or "",
+    )[-25:]
+    if not lines:
+        lines = [
+            "- Revision 1: An earlier published edition existed and its "
+            "audio, transcript, evidence and notes are archived."
+        ]
+    lines.append(
+        f"- Revision {revision}: Automated same-date regeneration at "
+        f"{stamp}. Audio/transcript assets were replaced; no human-reviewed "
+        "correction is implied."
+    )
+    return (
+        "\n\n### Release revision history\n"
+        + "\n".join(lines)
+        + f"\n<!-- FIRST_LIGHT_REVISION_V1:{revision} -->\n"
+        + "Earlier assets are archived with revision-numbered filenames. "
+        "An automated regeneration is not a human correction.\n"
+        "Correction requests and editorial standards: "
+        "https://github.com/snrahimi/first-light-podcast/blob/main/CORRECTIONS.md\n"
+    )
+
+
+def archive_prior_release_assets(tag, prior_body):
+    """Preserve old MP3/transcript/evidence/notes before same-day replacement.
+
+    Abort the replacement when the existing files cannot be archived.
+    Automatically generated archives are explicitly versioned and public.
+    """
+    match = re.search(
+        r"<!-- FIRST_LIGHT_REVISION_V1:(\d{1,4}) -->",
+        prior_body or "",
+    )
+    revision = int(match.group(1)) if match else 1
+    assets_result = run_gh(
+        "release", "view", tag, "--json", "assets", "--jq",
+        ".assets[].name", check=False,
+    )
+    if assets_result.returncode != 0:
+        raise RuntimeError("Unable to inspect previous episode asset list")
+    present = set(assets_result.stdout.splitlines())
+    originals = (tag + ".mp3", tag + ".txt", tag + "-evidence.json")
+    if any(name not in present for name in originals):
+        raise RuntimeError("Previous release is incomplete; refusing replacement")
+    folder = WORK / "previous_revisions"
+    folder.mkdir(parents=True, exist_ok=True)
+    for original in originals:
+        path = folder / original
+        path.unlink(missing_ok=True)
+        downloaded = run_gh(
+            "release", "download", tag, "--pattern", original,
+            "--dir", str(folder), check=False,
+        )
+        if downloaded.returncode != 0 or not path.exists() or not path.stat().st_size:
+            raise RuntimeError("Could not archive existing published episode")
+        suffix = original[len(tag):]
+        archived = folder / f"{tag}-revision{revision}{suffix}"
+        path.replace(archived)
+        run_gh("release", "upload", tag, str(archived), "--clobber")
+    prior_notes = folder / f"{tag}-revision{revision}-notes.md"
+    prior_notes.write_text(prior_body, encoding="utf-8")
+    run_gh("release", "upload", tag, str(prior_notes), "--clobber")
+    LOG.info("Archived previous public audio and evidence as release revision %d",
+             revision)
+
+
 def publish_release(day, mp3, transcript, notes, audit=None):
     tag = "first-light-" + day
     title = f"{TITLE} | {day}"
@@ -1191,9 +1273,28 @@ def publish_release(day, mp3, transcript, notes, audit=None):
     if audit is not None:
         assets.append(str(audit))
     if run_gh("release", "view", tag, check=False).returncode == 0:
+        old = run_gh(
+            "release", "view", tag, "--json", "body", "--jq", ".body",
+            check=False,
+        )
+        if old.returncode != 0:
+            raise RuntimeError("Cannot read prior release notes for revision audit")
+        archive_prior_release_assets(tag, old.stdout)
+        with Path(notes).open("a", encoding="utf-8") as file:
+            file.write(release_revision_notes(old.stdout))
+        LOG.warning(
+            "Existing daily release will be regenerated. Previous audio, "
+            "transcript, evidence and notes have been archived."
+        )
         run_gh("release", "upload", tag, *assets, "--clobber")
         run_gh("release", "edit", tag, "--title", title, "--notes-file", str(notes))
     else:
+        with Path(notes).open("a", encoding="utf-8") as file:
+            file.write(
+                "\n\n### Release revision history\n"
+                "- Revision 1: Initial publication.\n"
+                "<!-- FIRST_LIGHT_REVISION_V1:1 -->\n"
+            )
         run_gh("release", "create", tag, *assets,
                "--title", title, "--notes-file", str(notes), "--latest")
 
@@ -1306,6 +1407,7 @@ audio{{display:block;width:100%;margin:30px 0}}
 <p><a href="latest.mp3?date={day}">Download this episode</a> ·
 <a href="feed.xml">Subscribe with RSS</a> ·
 <a href="evidence.json">Newsroom source audit</a> ·
+<a href="health.html">Production quality dashboard</a> ·
 <a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
 <h2>Sources</h2><ol>{links}</ol>
 <h2>Transcript</h2><p>{html.escape(transcript)}</p>
@@ -1361,9 +1463,39 @@ def main():
     edition["audio_quality"] = audio_stats
     LOG.info("Pre-publish audio verified: %s, %.1f seconds, %s bps",
              narrator, audio_stats["duration_seconds"], audio_stats["bitrate_bps"])
+    record = monitor2plus.health_record(day, edition, audio_stats)
+    with notes.open("a", encoding="utf-8") as file:
+        file.write("\n\n" + monitor2plus.encode_health(record) + "\n")
     publish_release(day, mp3, transcript, notes, evidence_path)
     releases = list_releases(day)
     base = public_base()
+    history = monitor2plus.rolling_report(releases, now.date())
+    (SITE / "health.json").write_text(
+        json.dumps(history, indent=2), encoding="utf-8"
+    )
+    health_lines = [
+        ("Episodes published in 30-day calendar window", history["episodes_found"]),
+        ("Episodes carrying quality metadata", history["episodes_with_quality_metadata"]),
+        ("Narrated episodes within 5–7 minutes", history["five_to_seven_minute_episodes"]),
+        ("Fallback scripts among measured episodes", history["rss_script_fallbacks"]),
+        ("Official document pages among measured", history["official_source_pages_total"]),
+    ]
+    (SITE / "health.html").write_text(
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>First Light production health</title>'
+        '<body style="font:18px/1.6 system-ui;max-width:720px;margin:30px auto;padding:20px">'
+        '<h1>First Light production health</h1>'
+        '<p>Rolling window ending ' + html.escape(day) + '.</p><dl>'
+        + "".join(
+            '<dt>' + html.escape(label) + '</dt><dd>' + str(value) + '</dd>'
+            for label, value in health_lines
+        )
+        + '</dl><p>' + html.escape(history["metric_limitations"]) + '</p>'
+        '<p><a href="health.json">Machine-readable metrics</a> · '
+        '<a href="index.html">Listen to First Light</a></p></body></html>',
+        encoding="utf-8"
+    )
 
     xml_feed(releases, base).write(SITE / "feed.xml", encoding="utf-8", xml_declaration=True)
     cover(SITE / "cover.png")
