@@ -182,7 +182,7 @@ def _cached_section(cache_dir, model, prompt):
         cache = json.loads(path.read_text(encoding="utf-8"))
         if (cache.get("version") != 1 or
             cache.get("identity") != path.stem or
-            time.time() - float(cache.get("created", 0)) not in range(0, CACHE_MAX_AGE_SECONDS + 1)):
+            not (0 <= time.time() - float(cache.get("created", 0)) <= CACHE_MAX_AGE_SECONDS)):
             return None
         script = cache.get("script")
         if not isinstance(script, str) or _section_rejection(script):
