@@ -244,8 +244,8 @@ def weather_narration(w):
         f"{round(w['low_f'])}. Forecast maximum rain chance is about "
         f"{w['max_rain_percent']} percent. "
     )
-    if w["highest_rain_chance_hours"] and w["max_rain_percent"]>=20:
-        hour=w["highest_rain_chance_hours"][0]["hour_local"]
+    if w["peak_rain_chance_hours"] and w["max_rain_percent"]>=20:
+        hour=w["peak_rain_chance_hours"][0]["hour_local"]
         statement+=f"The hourly forecast shows the higher rain chance near {hour} local time. "
     if w["nws_alert_check"]=="checked":
         if w["nws_active_alerts"]:
