@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 import requests
 import calendar
 import feedparser
+from src import editorial
 import base64
 import io
 import wave
@@ -283,13 +284,20 @@ def tidy(text, limit=220):
     return text[:limit].rsplit(" ", 1)[0] if len(text) > limit else text
 
 def rss_news(now):
+    """Discover recent source *candidates*, retaining overlapping reports.
+
+    Do not collapse two publishers writing about the same event: the editorial
+    curation layer needs related headlines to distinguish source diversity.
+    """
     result = {"world": [], "business": [], "science": [], "tech": []}
-    working = 0
+    working, encountered = 0, set()
     allstories = []
     for section, name, feedurl in RSS_FEEDS:
         try:
-            resp = requests.get(feedurl, timeout=16,
-                 headers={"User-Agent": "FirstLightPodcast/2.0 (personal news briefing)"})
+            resp = requests.get(
+                feedurl, timeout=(8, 18),
+                headers={"User-Agent": "FirstLightPodcast/2.0 (daily sourced headlines)"}
+            )
             resp.raise_for_status()
             if len(resp.content) > 2_000_000:
                 raise ValueError("Oversized RSS feed")
@@ -297,42 +305,49 @@ def rss_news(now):
             if not parsed.entries:
                 raise ValueError("No stories")
             working += 1
-            for story in parsed.entries[:18]:
+            for story in parsed.entries[:24]:
                 title = tidy(story.get("title"), 180)
-                link = story.get("link", "")
-                timestamp = story.get("published_parsed") or story.get("updated_parsed")
-                if not title or not link.startswith("https://") or not timestamp:
+                link = str(story.get("link", ""))
+                stamp = story.get("published_parsed") or story.get("updated_parsed")
+                if not title or not link.startswith("https://") or not stamp:
                     continue
-                dt = datetime.fromtimestamp(calendar.timegm(timestamp), timezone.utc)
-                age = (now.astimezone(timezone.utc)-dt).total_seconds()/3600
+                dt = datetime.fromtimestamp(calendar.timegm(stamp), timezone.utc)
+                age = (now.astimezone(timezone.utc) - dt).total_seconds() / 3600
                 if age < -1 or age > 42:
                     continue
+                identity = (name, link)
+                if identity in encountered:
+                    continue
+                encountered.add(identity)
                 allstories.append({
                     "category": section, "publisher": name,
                     "title": title, "summary": tidy(story.get("summary"), 200),
-                    "url": link, "published": dt.isoformat(), "age": age
+                    "url": link, "published": dt.isoformat(), "age": age,
                 })
         except (requests.RequestException, ValueError, TypeError, OverflowError) as exc:
-            LOG.warning("Feed %s unavailable: %s", name, exc)
+            LOG.warning("Feed %s unavailable: %s", name, type(exc).__name__)
     if working < 4:
         raise RuntimeError("Fewer than four working news feeds; no episode published")
-    unique = set()
-    for group in result:
-        count_per_source = {}
-        for story in sorted((s for s in allstories if s["category"]==group),
-                             key=lambda x: x["age"]):
-            identity = re.sub(r"[^a-z0-9]", "", story["title"].lower())[:85]
-            if identity in unique or count_per_source.get(story["publisher"],0)>=4:
+    caps = {"world": 40, "business": 18, "science": 14, "tech": 14}
+    for section in result:
+        per_publisher = {}
+        for entry in sorted(
+            (s for s in allstories if s["category"] == section),
+            key=lambda s: (s["age"], s["title"])
+        ):
+            source = entry["publisher"]
+            if per_publisher.get(source, 0) >= 12:
                 continue
-            unique.add(identity)
-            count_per_source[story["publisher"]] = count_per_source.get(story["publisher"],0)+1
-            result[group].append(story)
-            if len(result[group]) >= (9 if group=="world" else 5):
+            per_publisher[source] = per_publisher.get(source, 0) + 1
+            result[section].append(entry)
+            if len(result[section]) >= caps[section]:
                 break
-    if len(result["world"]) < 5 or len(result["business"]) < 2 or (
-         len(result["science"])+len(result["tech"]) < 2):
-        raise RuntimeError("Too few recent cross-category headlines; no episode published")
+    if len(result["world"]) < 4 or len(result["business"]) < 1 or (
+        len(result["science"]) + len(result["tech"]) < 1
+    ):
+        raise RuntimeError("Insufficient fresh cross-category reporting")
     return result
+
 
 def selected_stories(groups):
     return {
