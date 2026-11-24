@@ -148,7 +148,10 @@ def assess_daily_delivery(releases, today):
 
 
 def load_releases(repository, token, *, get=requests.get):
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+    if not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*",
+        repository,
+    ):
         raise ValueError("Invalid GitHub repository identifier")
     if not token:
         raise RuntimeError("Missing GitHub token for monitoring")
