@@ -824,104 +824,147 @@ def _gemini_speech_payload(text):
     }
 
 
-def _tts_gemini(script, destination):
-    """Generate full narration with the previously auditioned Gemini Charon.
+def _charon_segment(text_chunk, index, total):
+    """One speech segment with bounded retries for transient service failures.
 
-    Each Gemini response is standard PCM WAV (RIFF); append matching PCM frames
-    into one file, with brief digital silence to smooth transitions.
+    Log only HTTP status codes, segment numbers and exception types. Never
+    expose keys, response bodies, provider diagnostics or private audio.
     """
-    key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("Gemini API key unavailable")
+    key = required("GEMINI_API_KEY")
+    endpoint = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    for attempt in range(1, 4):
+        try:
+            response = requests.post(
+                endpoint,
+                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                json=_gemini_speech_payload(text_chunk),
+                timeout=(12, 160),
+            )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            if attempt == 3:
+                raise RuntimeError(
+                    f"Gemini Charon segment {index}/{total} failed: "
+                    f"{type(exc).__name__} after 3 attempts"
+                ) from None
+            LOG.warning(
+                "Gemini Charon segment %d/%d network %s; retry %d/2",
+                index, total, type(exc).__name__, attempt,
+            )
+            time.sleep(12 * attempt)
+            continue
+        status = response.status_code
+        if status == 200:
+            return response
+        if status in (429, 500, 502, 503, 504) and attempt < 3:
+            # 429 may mean temporary throttling or a daily quota limit. Never
+            # assume that retrying will restore quota or that paid is enabled.
+            pause = (35 * attempt if status == 429 else 12 * attempt)
+            LOG.warning(
+                "Gemini Charon segment %d/%d HTTP %d; retry %d/2 in %ds",
+                index, total, status, attempt, pause,
+            )
+            time.sleep(pause)
+            continue
+        raise RuntimeError(
+            f"Gemini Charon segment {index}/{total} failed: "
+            f"HTTP {status} after {attempt} attempt(s)"
+        )
+    raise RuntimeError(f"Gemini Charon segment {index}/{total} unavailable")
+
+
+def _tts_gemini(script, destination):
+    """Produce COMPLETE Charon narration or raise. Never substitute a voice."""
+    if not os.getenv("GEMINI_API_KEY", "").strip():
+        raise RuntimeError("Gemini Charon unavailable: GEMINI_API_KEY missing")
     chunks = _gemini_chunks(script)
     if not chunks:
         raise RuntimeError("Empty podcast narration")
-    params = None
-    audio_frames = []
-    total_seconds = 0.0
+    params, audio_frames, total_seconds = None, [], 0.0
     for index, text_chunk in enumerate(chunks, 1):
-        response = requests.post(
-            "https://generativelanguage.googleapis.com/v1beta/interactions",
-            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-            json=_gemini_speech_payload(text_chunk),
-            timeout=(12, 160),
-        )
-        if response.status_code != 200:
-            # No paid fallback: if quota/availability blocks Gemini, use local TTS.
-            raise RuntimeError(
-                f"Gemini Charon request {index}/{len(chunks)} returned "
-                f"HTTP {response.status_code}"
-            )
-        data = response.json()
-        parts = [
-            part for step in data.get("steps", [])
-            if step.get("type") == "model_output"
-            for part in step.get("content", []) or []
-            if part.get("type") == "audio" and part.get("data")
-        ]
-        if not parts:
-            raise RuntimeError(f"Gemini Charon returned no audio for chunk {index}")
-        raw = base64.b64decode(parts[-1]["data"], validate=True)
-        if not raw.startswith(b"RIFF"):
-            raise RuntimeError(f"Gemini Charon returned unexpected audio for chunk {index}")
-        with wave.open(io.BytesIO(raw), "rb") as item:
-            if item.getcomptype() != "NONE":
-                raise RuntimeError("Unsupported compressed Gemini WAV")
-            layout = (item.getnchannels(), item.getsampwidth(), item.getframerate())
-            if params is None:
-                params = layout
-            elif layout != params:
-                raise RuntimeError("Gemini audio encoding changed between chunks")
-            if item.getnframes() < item.getframerate() * 3:
-                raise RuntimeError(f"Gemini Charon audio chunk {index} was too short")
-            total_seconds += item.getnframes() / item.getframerate()
-            audio_frames.append(item.readframes(item.getnframes()))
-        LOG.info("Gemini Charon narration segment %s/%s completed", index, len(chunks))
-    if params is None:
-        raise RuntimeError("Gemini Charon created no audio")
-    channels, sample_width, sample_rate = params
-    with wave.open(str(destination), "wb") as output:
-        output.setnchannels(channels)
-        output.setsampwidth(sample_width)
-        output.setframerate(sample_rate)
-        for index, samples in enumerate(audio_frames):
-            if index:
-                output.writeframes(b"\x00" * int(sample_rate * .18) * channels * sample_width)
-            output.writeframes(samples)
-    LOG.info("Gemini Charon finished %s segments, %.0fs spoken audio",
-             len(chunks), total_seconds)
-
-
-def synthesize(script,destination):
-    """Prefer Gemini Charon, then higher-fidelity Kokoro FP16, then Piper."""
-    wav = WORK / "narration.wav"
-    try:
-        _tts_gemini(script, wav)
-        narrator = "Gemini Charon"
-        LOG.info("Using chosen Gemini Charon narrator")
-    except Exception as err:
-        # Do not reveal API secrets in exception strings.
-        LOG.warning("Gemini Charon unavailable (%s). Switching to local TTS.",
-                    type(err).__name__)
+        if index > 1:
+            # Space requests out to reduce per-minute throttling.
+            time.sleep(8)
+        response = _charon_segment(text_chunk, index, len(chunks))
         try:
-            _tts_kokoro(script, wav)
-            narrator = "Kokoro FP16 (Adam)"
-            LOG.info("Using free Kokoro FP16 backup voice")
-        except Exception as local_err:
-            LOG.warning("Kokoro unavailable (%s), switching to Piper",
-                        type(local_err).__name__)
-            _tts_piper(script, wav)
-            narrator = "Piper local backup"
-            LOG.info("Using free Piper backup voice")
+            data = response.json()
+            parts = [
+                part for step in data.get("steps", [])
+                if step.get("type") == "model_output"
+                for part in step.get("content", []) or []
+                if part.get("type") == "audio" and part.get("data")
+            ]
+            if not parts:
+                raise ValueError("audio missing")
+            raw = base64.b64decode(parts[-1]["data"], validate=True)
+            if not raw.startswith(b"RIFF"):
+                raise ValueError("unexpected audio encoding")
+            with wave.open(io.BytesIO(raw), "rb") as item:
+                if item.getcomptype() != "NONE":
+                    raise ValueError("compressed WAV")
+                layout = (
+                    item.getnchannels(), item.getsampwidth(), item.getframerate()
+                )
+                if params is None:
+                    params = layout
+                elif params != layout:
+                    raise ValueError("inconsistent WAV stream layout")
+                if item.getnframes() < item.getframerate() * 3:
+                    raise ValueError("audio duration too short")
+                total_seconds += item.getnframes() / item.getframerate()
+                audio_frames.append(item.readframes(item.getnframes()))
+        except (ValueError, KeyError, TypeError, wave.Error, OSError) as exc:
+            raise RuntimeError(
+                f"Gemini Charon segment {index}/{len(chunks)} invalid: "
+                f"{type(exc).__name__}"
+            ) from None
+        LOG.info(
+            "Gemini Charon narration segment %d/%d completed",
+            index, len(chunks),
+        )
+    if not audio_frames or params is None:
+        raise RuntimeError("Gemini Charon produced no complete narration")
+
+    # Do not create any output file until EVERY segment is successful.
+    channels, sample_width, sample_rate = params
+    temporary = destination.with_suffix(".partial.wav")
+    try:
+        with wave.open(str(temporary), "wb") as output:
+            output.setnchannels(channels)
+            output.setsampwidth(sample_width)
+            output.setframerate(sample_rate)
+            for index, samples in enumerate(audio_frames):
+                if index:
+                    output.writeframes(
+                        b"\x00" * int(sample_rate * .18) * channels * sample_width
+                    )
+                output.writeframes(samples)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    LOG.info(
+        "Gemini Charon finished %d segments, %.0f seconds of spoken audio",
+        len(chunks), total_seconds,
+    )
+
+
+def synthesize(script, destination):
+    """Strict narrator policy: publish Charon or publish nothing.
+
+    An unapproved replacement voice is never used. Failure leaves the
+    existing episode and RSS/Pages untouched.
+    """
+    wav = WORK / "narration.wav"
+    _tts_gemini(script, wav)
+    LOG.info("Verified narrator: Gemini Charon. Local voice fallback disabled.")
     subprocess.run([
         "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
         "-i", str(wav), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-codec:a", "libmp3lame", "-ar", "44100", "-b:a", "192k",
-        str(destination)
+        str(destination),
     ], check=True, timeout=240)
     if destination.stat().st_size < 65_000:
-        raise RuntimeError("Generated MP3 was unexpectedly small")
-    return narrator
+        raise RuntimeError("Gemini Charon MP3 was unexpectedly small")
+    return "Gemini Charon"
 
 
 def inspect_audio(mp3):
