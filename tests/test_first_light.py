@@ -20,6 +20,7 @@ from src.first_light import (
     http_json, fetch_weather, weather_narration, _weather_unavailable,
     _gemini_chunks, _gemini_speech_payload, _tts_gemini,
     inspect_audio, _trusted_feed_link, news_and_script,
+    synthesize, _charon_segment,
 )
 
 class PodcastTests(unittest.TestCase):
@@ -161,7 +162,8 @@ class PodcastTests(unittest.TestCase):
         script = " ".join(("Good morning, San Antonio, here are world news headlines. " * 40).split())
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ, {"GEMINI_API_KEY": "test-key"}
-        ), patch("src.first_light.requests.post", return_value=fake) as post:
+        ), patch("src.first_light.requests.post", return_value=fake) as post, \
+             patch("src.first_light.time.sleep"):
             dest = Path(temp) / "test.wav"
             _tts_gemini(script, dest)
             self.assertTrue(dest.is_file())
@@ -174,9 +176,63 @@ class PodcastTests(unittest.TestCase):
         bad = SimpleNamespace(status_code=429)
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ, {"GEMINI_API_KEY": "test-key"}
-        ), patch("src.first_light.requests.post", return_value=bad):
+        ), patch("src.first_light.requests.post", return_value=bad) as post, \
+             patch("src.first_light.time.sleep") as sleeper:
+            destination = Path(temp) / "test.wav"
             with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
-                _tts_gemini("Good morning.", Path(temp) / "test.wav")
+                _tts_gemini("Good morning.", destination)
+            self.assertEqual(post.call_count, 3)
+            self.assertFalse(destination.exists())
+            self.assertEqual(sleeper.call_count, 2)
+
+    def test_charon_429_retries_then_recovers(self):
+        slow = SimpleNamespace(status_code=429)
+        good = SimpleNamespace(status_code=200)
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only"}), \
+             patch("src.first_light.requests.post",
+                   side_effect=[slow, good]) as post, \
+             patch("src.first_light.time.sleep") as sleeper:
+            result = _charon_segment("Good morning.", 3, 4)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(post.call_count, 2)
+        sleeper.assert_called_once_with(35)
+
+    def test_charon_permanent_http_failure_is_not_retried(self):
+        rejected = SimpleNamespace(status_code=403)
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only"}), \
+             patch("src.first_light.requests.post",
+                   return_value=rejected) as post, \
+             patch("src.first_light.time.sleep") as sleeper:
+            with self.assertRaisesRegex(RuntimeError, "segment 3/4 failed: HTTP 403"):
+                _charon_segment("Good morning.", 3, 4)
+        post.assert_called_once()
+        sleeper.assert_not_called()
+
+    def test_charon_failure_never_uses_adam_or_piper(self):
+        with tempfile.TemporaryDirectory() as temp, \
+             patch("src.first_light.WORK", Path(temp)), \
+             patch("src.first_light._tts_gemini",
+                   side_effect=RuntimeError("HTTP 429")), \
+             patch("src.first_light._tts_kokoro") as adam, \
+             patch("src.first_light._tts_piper") as piper, \
+             patch("src.first_light.subprocess.run") as ffmpeg:
+            destination = Path(temp) / "first-light.mp3"
+            with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
+                synthesize("Example sourced briefing.", destination)
+            self.assertFalse(destination.exists())
+        adam.assert_not_called()
+        piper.assert_not_called()
+        ffmpeg.assert_not_called()
+
+    def test_charon_missing_api_key_does_not_create_output(self):
+        with tempfile.TemporaryDirectory() as temp, \
+             patch.dict(os.environ, {"GEMINI_API_KEY": ""}), \
+             patch("src.first_light.requests.post") as post:
+            destination = Path(temp) / "test.wav"
+            with self.assertRaisesRegex(RuntimeError, "API key is missing"):
+                _tts_gemini("One sentence.", destination)
+            self.assertFalse(destination.exists())
+        post.assert_not_called()
 
     def test_rss_source_domains_reject_impersonators(self):
         self.assertTrue(_trusted_feed_link(
