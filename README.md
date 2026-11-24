@@ -306,3 +306,29 @@ checked. The initial release archive and rolling reporting start with
 newly produced episodes; older health metrics may be unavailable. Check
 [the living roadmap](PACKAGE2PLUS_ROADMAP.md) for capabilities still
 partial or deferred.
+
+## Package 2+.5: reliability and editorial depth
+
+[Full feature list and acceptance plan](PACKAGE2PLUS_ROADMAP.md#package-25-reliability-and-editorial-quality-ci-pending)
+
+Package 2+.5 adds a bounded GitHub release-memory retry with a public seven-day
+Pages `memory.json` recovery file (after the first successful new-version
+publication), longer but capped Gemini 5xx retry backoff, and a source-led
+fallback that can speak additional *already audited* feed excerpts instead of
+repeating generic qualifications. News selection now prefers distinct world
+events when scores are comparable and higher-impact economic business news
+over isolated private luxury listings.
+
+Actions avoids saving an empty script cache, but retains valid completed
+sections across failed runs. RSS explicitly links the current episode MP3,
+not an older revision archive.
+
+Google's public pricing page lists `gemini-3.1-flash-lite` as a Free Tier
+candidate for scriptwriting. **It is not enabled as automatic failover**:
+availability, daily quotas, project billing and data-use terms must be checked
+for the actual Google project and approved by the owner. Gemini Charon remains
+the only approved narrator, and a shorter accurately attributed episode may
+still publish when the supplied sources are too thin.
+
+See [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing)
+and [rate-limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits).
