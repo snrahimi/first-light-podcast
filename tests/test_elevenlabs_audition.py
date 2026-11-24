@@ -91,6 +91,20 @@ class ElevenLabsAuditionTests(unittest.TestCase):
                     post=lambda *a, **kw: response,
                 )
 
+    def test_audition_installs_ffprobe_before_audio_inspection(self):
+        workflow = (
+            Path(__file__).resolve().parents[1]
+            / ".github/workflows/elevenlabs-voice-audition.yml"
+        ).read_text(encoding="utf-8")
+        installer = "sudo apt-get install -y --no-install-recommends ffmpeg"
+        verifier = "ffprobe -version"
+        self.assertIn(installer, workflow)
+        self.assertIn(verifier, workflow)
+        self.assertLess(workflow.index(installer), workflow.index(verifier))
+        self.assertIn("run: python -m src.elevenlabs_audition", workflow)
+        self.assertLess(workflow.index(verifier),
+                        workflow.index("run: python -m src.elevenlabs_audition"))
+
     def test_cli_fail_closed_if_secrets_absent(self):
         with tempfile.TemporaryDirectory() as td:
             with patch.dict("os.environ", {
