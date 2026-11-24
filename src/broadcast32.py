@@ -54,7 +54,9 @@ def _call_gemini(key, model, prompt, post=requests.post):
         "as an ai language model", "here is the script:", "source material:",
         "the user asked", "system prompt"
     )):
+        LOG.warning("Gemini writing response included model-instruction boilerplate")
         return None
+    LOG.info("Gemini broadcast section drafted: %d words", len(script.split()))
     return script
 
 
@@ -131,12 +133,22 @@ Return ONLY the polished broadcast SECTION text.
 """
 
 
-def _check_section(script, minimum=130):
-    if not script or len(script.split()) < minimum or len(script.split()) > 640:
-        return False
+def _section_rejection(script, minimum=100):
+    """Return a safe diagnostic category, never the model's news content."""
+    if not script:
+        return "no_text"
+    words = len(script.split())
+    if words < minimum:
+        return f"too_short_{words}_words"
+    if words > 750:
+        return f"too_long_{words}_words"
     if re.search(r"\b(https?://|www\.)", script):
-        return False
-    return True
+        return "raw_url_in_spoken_script"
+    return None
+
+
+def _check_section(script, minimum=100):
+    return _section_rejection(script, minimum=minimum) is None
 
 
 def generated_script(now, edition, dossiers, weather_text, key, model,
@@ -166,13 +178,17 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         a = _call_gemini(
             key, model, _prompt(now, "world", world_material, 430), post=post
         )
-        if not _check_section(a, minimum=170):
-            return None, {"reason": "weak world section", "provider_calls": 1}
+        rejected = _section_rejection(a, minimum=100)
+        if rejected:
+            LOG.warning("Gemini world-section rejected: %s", rejected)
+            return None, {"reason": "world_" + rejected, "provider_calls": 1}
         b = _call_gemini(
             key, model, _prompt(now, "other", rest_material, 400), post=post
         )
-        if not _check_section(b, minimum=160):
-            return None, {"reason": "weak mixed-beat section", "provider_calls": 2}
+        rejected = _section_rejection(b, minimum=100)
+        if rejected:
+            LOG.warning("Gemini mixed-beat section rejected: %s", rejected)
+            return None, {"reason": "mixed_" + rejected, "provider_calls": 2}
     except requests.RequestException as exc:
         LOG.warning("Segmented script request unavailable (%s)", type(exc).__name__)
         return None, {"reason": type(exc).__name__, "provider_calls": 2}
