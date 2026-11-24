@@ -78,7 +78,7 @@ def _editorial_beat_plan(material):
             # Prefer meaningful source detail: distinct summaries and
             # official excerpts are more useful than headline counts alone.
             long_excerpts = sum(
-                len(text.split()) >= 17 for _, text in distinct
+                len(text.split()) >= 14 for _, text in distinct
                 if isinstance(text, str)
             )
             budget = min(
