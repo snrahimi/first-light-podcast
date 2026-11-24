@@ -1,7 +1,7 @@
 """Offline Newsroom 3.0 tests. No live API calls or paid models."""
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from zoneinfo import ZoneInfo
 import unittest
 
@@ -147,6 +147,42 @@ class Newsroom3Tests(unittest.TestCase):
         self.assertIn("GDELT Project", data["discovery"]["source"])
         self.assertIn("not independent factual verification",
                       newsroom3.audit_notes(dossiers, stats))
+
+    def test_punctuation_comma_not_counted_as_an_unsupported_number(self):
+        edition = editorial.curate(editorial_groups(), [], NOW)
+        dossiers = newsroom3.build_dossiers(edition, [])
+        text = ("Good morning San Antonio, this is First Light World Report "
+                "on November 23, 2026. Here is the world report.")
+        self.assertTrue(newsroom3.script_numeric_gate(
+            text, dossiers, {}, NOW)["numeric_tokens_approved"])
+
+    def test_evidence_scoped_writer_rewrites_short_draft_at_most_once(self):
+        from src.first_light import optional_gemini_script
+        edition = editorial.curate(editorial_groups(), [], NOW)
+        short = ("Good morning, San Antonio, this is First Light: World Report "
+                 "on November 23, 2026. World headlines follow. "
+                 + "Our sources offer limited published headline details. " * 78)
+        revised = ("Good morning, San Antonio, this is First Light: World Report "
+                   "on November 23, 2026. World headlines follow. "
+                   + "Our sources offer limited published headline details. " * 115)
+        def reply(script):
+            return SimpleNamespace(
+                status_code=200,
+                json=lambda: {"candidates": [{"content": {
+                    "parts": [{"text": script}]
+                }}]},
+                raise_for_status=lambda: None,
+            )
+        with patch.dict("os.environ", {
+            "GEMINI_API_KEY": "test-only", "GEMINI_MODEL": "gemini-3.5-flash-lite"
+        }), patch("src.first_light.requests.post", side_effect=[
+            reply(short), reply(revised)
+        ]) as post:
+            result = optional_gemini_script(NOW, edition, {}, {})
+        self.assertEqual(result, revised.replace("\n", " ").strip())
+        self.assertEqual(post.call_count, 2)
+        self.assertIn("gemini-3.5-flash-lite", post.call_args_list[0].args[0])
+
 
 if __name__ == "__main__":
     unittest.main()
