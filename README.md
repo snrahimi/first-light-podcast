@@ -369,7 +369,15 @@ Setup: Both `ELEVENLABS_VOICE_ID` and `ELEVENLABS_API_KEY` must be set
 as **GitHub Actions repository secrets**. The source code never reads or
 prints their values. Do not move them into repository variables or source
 files. In GitHub Actions, open **ElevenLabs Voice Audition (Manual Only)**,
-select **main**, and click **Run workflow**. From the completed workflow,
+select **main** and **mode = diagnose_only** (the default), then click
+**Run workflow**. This makes at most two **GET metadata** requests and
+generates no speech or credit charges. It reports only broad plan/voice
+categories, not the API key, voice ID, account balance or raw API errors.
+Read-only checks can be unavailable if the API key is limited to TTS-only
+permissions; this means "unknown", not necessarily a valid voice.
+
+If the selected voice is eligible and you wish to spend credits, run the
+workflow again with **mode = generate_sample**. On successful synthesis,
 download the artifact `first-light-elevenlabs-review-sample`, containing
 an MP3, example script and credit-safe metadata. The artifact expires
 after **one day**. In a **public GitHub repository**, authenticated GitHub users
@@ -382,10 +390,16 @@ The test uses `eleven_flash_v2_5` and MP3 44.1kHz/128kbps, which is
 normally available on the free tier when the selected voice is eligible.
 Voice permissions, available credits and model access are decided by
 ElevenLabs and may produce HTTP 402/403/429. This test does **not**
-automatically retry or switch models. It does not verify the selected
-voice or available credits until the user manually dispatches it.
-Each run still consumes free credits (typically 0.5-1 credit per
-character depending on model/account pricing).
+automatically retry or switch models. Read-only diagnosis never spends voice-generation credits. Only an
+explicit generate_sample run attempts to synthesize audio, typically
+costing 0.5-1 credit per character if eligible.
+The code rejects a known free-tier Voice Library mismatch before
+generating audio. HTTP 402 means either a credit, billing or plan
+restriction; the error reason is summarized from allowlisted API codes,
+without exposing raw provider response data. A community Voice Library
+voice cannot be synthesized using ElevenLabs' free API, even if it
+works inside the ElevenLabs website. Choose an API-eligible premade
+voice or upgrade only after assessing the account terms.
 
 **License:** Free-plan generated speech is restricted to **noncommercial
 use with attribution**. This is a noncommercial voice evaluation only, not approved
