@@ -356,3 +356,36 @@ bonus. Neither heuristic replaces human news judgment.
 
 Full scope, acceptance limits, and remaining gaps:
 [Package 2+ roadmap](PACKAGE2PLUS_ROADMAP.md).
+
+
+## Optional ElevenLabs free-tier voice audition (manual, noncommercial)
+
+The optional workflow [ElevenLabs Voice Audition (Manual Only)](
+.github/workflows/elevenlabs-voice-audition.yml) creates **one**
+original ~45-second spoken demo (at most 820 characters) with your
+existing ElevenLabs voice, **without** changing the live podcast.
+
+Setup: Both `ELEVENLABS_VOICE_ID` and `ELEVENLABS_API_KEY` must be set
+as **GitHub Actions repository secrets**. The source code never reads or
+prints their values. Do not move them into repository variables or source
+files. In GitHub Actions, open **ElevenLabs Voice Audition (Manual Only)**,
+select **main**, and click **Run workflow**. From the completed workflow,
+download the artifact `first-light-elevenlabs-private-sample`, containing
+an MP3, example script and credit-safe metadata. The artifact expires
+after **one day**. The daily workflow is unchanged.
+
+The test uses `eleven_flash_v2_5` and MP3 44.1kHz/128kbps, which is
+normally available on the free tier when the selected voice is eligible.
+Voice permissions, available credits and model access are decided by
+ElevenLabs and may produce HTTP 402/403/429. This test does **not**
+automatically retry or switch models. It does not verify the selected
+voice or available credits until the user manually dispatches it.
+Each run still consumes free credits (typically 0.5-1 credit per
+character depending on model/account pricing).
+
+**License:** Free-plan generated speech is restricted to **noncommercial
+use with attribution**. This is a private evaluation only, not approved
+for distribution or monetization. To use ElevenLabs in the published
+First Light podcast, first verify the selected voice's commercial
+license and pay for the appropriate plan. A separate reviewed change
+would be required to replace Gemini Charon.
