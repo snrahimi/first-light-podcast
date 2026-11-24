@@ -120,13 +120,22 @@ def get_official_excerpt(url, publisher, get=requests.get, headline=None):
             # substantive subject token. This captures agency next-steps
             # without importing other unrelated releases from listing pages.
             tokens = editorial.key_tokens(headline)
+            # An agency name alone is not continuity. Otherwise a paragraph
+            # about an unrelated issue involving the same issuer can leak
+            # into the briefing after a valid headline anchor.
+            subject_tokens = tokens - {
+                "nasa", "united", "nations", "security", "council",
+                "bureau", "labor", "statistics", "agency", "government",
+                "official", "report", "reports", "announces", "press",
+            }
             selected, anchored = [], False
             for paragraph in paragraphs[:40]:
                 overlap = len(tokens & editorial.key_tokens(paragraph))
                 if overlap >= 2:
                     selected.append(paragraph)
                     anchored = True
-                elif anchored and overlap >= 1 and len(selected) < 8:
+                elif (anchored and len(selected) < 8
+                      and subject_tokens & editorial.key_tokens(paragraph)):
                     selected.append(paragraph)
                 elif anchored:
                     # Stop at the first unrelated paragraph instead of
