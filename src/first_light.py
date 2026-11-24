@@ -402,148 +402,221 @@ def weather_narration(w):
     return " ".join(lines)
 
 
-def fallback_readout(now, stories, weather):
-    # Fact-limited, original attributed headline roundup if free Gemini unavailable.
-    text=[
-        f"Good morning, San Antonio. Today is {now.strftime('%A, %B %d, %Y')}. "
-        "You're listening to First Light: World Report, your morning window on "
-        "what's happening around the world. The following is a recently published "
-        "headline roundup rather than independent investigative reporting. "
-        "Every story's original source is linked in the episode notes, and "
-        "breaking details may change throughout the day."
-    ]
-    openers={
-        "Top world headlines":"First, the top world headlines.",
-        "Around the world":"Now, some developments from around the world.",
-        "Business and markets":"Turning to business and markets.",
-        "Science and tech":"On to science and technology."
-    }
-    outros=[
-        "The original report contains more background.",
-        "Follow the original source for the latest updates.",
-        "More information may come out as this story develops.",
-        "The source is linked in today's episode notes."
-    ]
-    index=0
-    for section, items in selected_stories(stories).items():
-        text.append(openers[section])
-        for item in items:
-            line=f"{item['publisher']} reports: {item['title'].rstrip('.!')}. "
-            summary=item["summary"].rstrip(".! ")
-            if summary and summary.lower() not in item["title"].lower() and item["title"].lower() not in summary.lower():
-                line+=f"The short news-feed description adds: {tidy(summary,100)}. "
-            line+=outros[index%len(outros)]
-            text.append(line)
-            index+=1
-    text.extend([
-        "For markets, we won't invent index movements, stock prices or futures "
-        "before we can verify the time and figures. The business headlines are "
-        "sourced from recent published reports. On holidays and weekends, "
-        "remember that the last U.S. trading session may be days earlier.",
-        weather_narration(weather),
-        "The stories worth watching today are those still developing. "
-        "Major updates may follow official announcements, market openings, "
-        "new research releases and on-the-ground reporting. "
-        "Revisit the original sources for new facts rather than assuming "
-        "a morning headline tells the entire story.",
-        "Thanks for spending part of your morning with First Light: World Report. "
-        "Stay informed, keep asking questions, and have a great day."
-    ])
-    return re.sub(r"\s+", " ", " ".join(text))
+def fallback_readout(now, edition, weather):
+    """Honest, short source-attributed episode if Gemini script API unavailable.
 
-def optional_gemini_script(now, stories, weather):
-    key = os.getenv("GEMINI_API_KEY","").strip()
+    A limited feed summary is never padded with invented context to reach
+    the six-minute target. Such a fallback can be noticeably shorter.
+    """
+    parts = [
+        f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}.",
+        "This is First Light: World Report, your short and carefully sourced "
+        "look at the day ahead. Our briefing is produced with artificial "
+        "intelligence assistance and reviewed by automated source checks. "
+        "The original publisher reports are linked in the show notes. "
+        "When details are still emerging, we will say so rather than speculate.",
+    ]
+    leadin = {
+        "Top world headlines": "First, two major stories leading the day.",
+        "Around the world": "Now, a quick look at developments around the world.",
+        "Business and markets": "Turning to the economy and business.",
+        "Science": "In science today.",
+        "Technology and cybersecurity": "And in technology and cybersecurity.",
+    }
+    for section, stories in edition["rundown"].items():
+        if not stories:
+            continue
+        parts.append(leadin[section])
+        for story in stories:
+            parts.append(f"{story['publisher']} reports: {story['title'].rstrip('.!')}.")
+            summary = story.get("short_summary", "").strip(".! ")
+            if (summary and summary.lower() not in story["title"].lower()
+                    and story["title"].lower() not in summary.lower()):
+                parts.append(f"The outlet's brief description adds: {tidy(summary, 140)}.")
+            if story["related_reports"]:
+                other = story["related_reports"][0]
+                parts.append(
+                    f"{other['publisher']} also carries reporting on this developing topic. "
+                    "Details and context should be checked against the original reports."
+                )
+            else:
+                parts.append(
+                    "That headline comes from one publisher's feed in this briefing. "
+                    "Additional details have not been independently confirmed here."
+                )
+            if story.get("coverage_status") == "related_update_unverified":
+                parts.append(
+                    "We covered related news recently. The new reporting may "
+                    "contain developments worth following; check the source for details."
+                )
+    parts.extend([
+        "A quick note on financial figures. This broadcast does not quote "
+        "market index levels or prices without verified timestamps. "
+        "On weekends and public holidays, the last available closing values "
+        "may be from an earlier trading session.",
+        weather_narration(weather),
+        "As the day unfolds, watch for updates to the stories we just covered. "
+        "Early reports can change as officials and journalists release new information. "
+        "The episode page includes our source list and a place to request corrections.",
+        "That is First Light: World Report. Thanks for spending your morning "
+        "with us. Stay informed, and have a good day.",
+    ])
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+
+def optional_gemini_script(now, edition, weather):
+    """One bounded scriptwriting request per available free-tier model."""
+    key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
-        LOG.info("No Gemini key; using a source-attributed, no-API fallback.")
+        LOG.info("No Gemini script key; using sourced no-API fallback.")
         return None
-    # Only public RSS headlines and short excerpts are transmitted to Gemini.
-    # Never send financial/personal information, credentials, or full articles.
-    material={}
-    for section, entries in selected_stories(stories).items():
-        material[section]=[
-           {"publisher":e["publisher"],"title":e["title"],
-            "short_summary":e["summary"],"published":e["published"]}
-           for e in entries
-        ]
-    prompt=f"""Write the complete original 5–7 minute SPOKEN RADIO SCRIPT for
-First Light: World Report dated {now.strftime('%A, %B %d, %Y')}, waking up in
-San Antonio. Target 760–890 spoken words, conversational, clear,
-friendly, professional and politically neutral.
-Return ONLY actual narration: no markdown, bullets, raw links or editorial notes.
-Organize with smooth transitions: top world headlines, around the world,
-business and markets, science and tech, San Antonio weather, what to watch,
-and a concise upbeat signoff. Open with a good morning and full date.
-Base ALL factual claims solely on the attributed RSS source metadata and
-structured weather below. Do not add imagined context, explanations, market
-levels, quotes, speculation, statistics, event outcomes, or timelines.
-Use original wording; do not reproduce article text. Attribute stories
-to publishers. If facts are sparse, be shorter rather than invent facts.
-Do not give U.S. stock index figures because no verified values were supplied.
-If NWS alerts weren't verified, don't claim there aren't any.
-When weather values are null, say they are unavailable and do not invent values.
-Only use weather numbers supplied below. All temperatures Fahrenheit.
-News:
-{json.dumps(material,ensure_ascii=False)}
-San Antonio live weather:
-{json.dumps(weather,ensure_ascii=False)}
+    # Only public RSS headline metadata and weather are sent. Nothing personal.
+    material = edition["rundown"]
+    prompt = f"""You are the lead editor of First Light: World Report, a tight and
+trustworthy DAILY MORNING AUDIO NEWS PODCAST for San Antonio.
+
+Write ONLY the complete original spoken script for
+{now.strftime('%A, %B %d, %Y')}. TARGET 760–870 SPOKEN WORDS, approximately
+5–7 minutes at a natural broadcast pace. No markdown, section headings,
+production notes, stage directions, raw URLs, or bullet points.
+VOICE: one clear, warm, composed professional presenter. Active phrasing,
+natural transitions, simple spoken punctuation. No sensationalism.
+
+SHOW STRUCTURE:
+* 15–20 second opening with a compelling but fully sourced two-story preview.
+* Lead stories: the two biggest global events, roughly 110–140 words each.
+  Explain WHAT happened, WHAT is confirmed, and WHY it matters ONLY if
+  the short provided source metadata supports those conclusions.
+* Around the world: two short, geographically varied briefings.
+* Business/markets: one useful economic item. Do not invent index levels.
+* Science and technology: a noteworthy development in each, briefly.
+* Weather in San Antonio with actionable details and verified NWS alerts.
+* 30-second what-to-watch and a concise upbeat signoff.
+
+IMPORTANT EDITORIAL RULES:
+- The rundown contains selected recent headlines and SHORT publisher RSS
+  summaries. It does NOT contain full verified articles or independent
+  original research. Do not pretend that this is full investigative reporting.
+- Attribute consequential claims to the named publisher; distinguish
+  reported claims, official statements and established facts. Never create
+  quotes, amounts, statistics, causes, dates, explanations or outcomes
+  that are absent from the supplied source metadata.
+- "multiple publishers with closely related headlines" means
+  related reporting exists; IT DOES NOT mean detailed claims have been
+  independently verified. Do not claim anything has been fact-checked
+  across full articles based on similar headlines alone.
+- If a story has just one publisher, clearly attribute it.
+- Previous_headline/previous_date are for continuity. Treat possible
+  follow-up status as a *prompt to check whether details changed*,
+  not evidence of a confirmed new development. Do not state an update
+  happened without support from the newer headline/summary.
+- NEVER add filler to achieve the word goal. It is better to produce
+  fewer words than to invent news or analysis.
+- Do not repeat the same event twice in separate sections.
+- Market figures must be omitted unless timestamped and directly supplied.
+- Weather numbers may ONLY come from structured forecast data. If a
+  weather value is null, omit the number, never guess.
+- If National Weather Service alert checks failed, NEVER say no alerts exist.
+- Highlight major verified NWS warnings at the beginning if supplied.
+- Open with today's date and "First Light: World Report".
+- Early in the episode, briefly disclose: "This briefing is produced
+  with AI assistance." Do not imply a human reporter independently
+  checked every headline. Show notes contain the original source links.
+- The signoff invites corrections through our public source notes.
+
+CURATED NEWS HEADLINES AND PREVIOUS EPISODE CONTEXT:
+{json.dumps(material, ensure_ascii=False)}
+CURRENT SAN ANTONIO WEATHER / NWS ALERT STATUS:
+{json.dumps(weather, ensure_ascii=False)}
 """
-    model=os.getenv("GEMINI_MODEL","gemini-3.5-flash-lite")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+",model):
-        LOG.warning("Invalid Gemini model name; using headline-only fallback")
+    default = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", default):
+        LOG.warning("Invalid configured Gemini model, using sourced fallback")
         return None
-    # Newer Gemini Flash-Lite models provide Free tier access where eligible.
-    # If the selected model is unavailable to this project, try one other
-    # publicly documented free-tier model. Never call a paid AI API.
-    candidates=[model]
-    if model != "gemini-3.1-flash-lite":
+    candidates = [default]
+    if default != "gemini-3.1-flash-lite":
         candidates.append("gemini-3.1-flash-lite")
-    for selected_model in candidates:
+    for model in candidates:
         try:
-            response=requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{selected_model}:generateContent",
-                headers={"x-goog-api-key":key,"Content-Type":"application/json"},
-                json={"contents":[{"parts":[{"text":prompt}]}],
-                      "generationConfig":{"temperature":0.2,"maxOutputTokens":3600}},
-                timeout=100
+            response = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.18, "maxOutputTokens": 3700},
+                },
+                timeout=(12, 100),
             )
-            if response.status_code==404:
-                LOG.warning("Gemini model %s is unavailable (HTTP 404), trying another free-tier model",
-                            selected_model)
+            if response.status_code == 404:
+                LOG.warning("Gemini script model %s unavailable, try fallback model", model)
                 continue
-            if response.status_code in (401,403,429):
-                LOG.warning("Gemini rejected request with HTTP %d, using sourced RSS fallback",
+            if response.status_code in (401, 403, 429):
+                LOG.warning("Gemini script unavailable (HTTP %s), no-API fallback",
                             response.status_code)
                 return None
             response.raise_for_status()
-            data=response.json()
-            script=" ".join(p.get("text","") for p in data["candidates"][0]["content"]["parts"])
-            script=re.sub(r"\s+"," ",script.strip())
-            if not 650 <= len(script.split()) <= 990 or "San Antonio" not in script or "First Light" not in script:
-                LOG.warning("Gemini %s returned an unsuitable script, falling back to RSS",selected_model)
+            data = response.json()
+            script = " ".join(
+                p.get("text", "")
+                for p in data["candidates"][0]["content"]["parts"]
+            ).strip()
+            script = re.sub(r"\s+", " ", script)
+            # Reject exceptionally short or long responses, missing essential show
+            # metadata, rather than publishing an incomplete script as AI narration.
+            if not 640 <= len(script.split()) <= 995:
+                LOG.warning("Gemini script length %s is unsuitable, using fallback",
+                            len(script.split()))
                 return None
-            LOG.info("Gemini script produced with model %s (%s words)",selected_model,len(script.split()))
+            try:
+                editorial.script_quality(script, edition, now)
+            except ValueError as exc:
+                LOG.warning("Gemini script quality check failed: %s", exc)
+                return None
+            LOG.info("Gemini script ready: %s words via %s", len(script.split()), model)
             return script
-        except (requests.RequestException,ValueError,KeyError,IndexError) as exc:
-            LOG.warning("Gemini model %s failed; RSS fallback: %s",
-                        selected_model,str(exc)[:140])
+        except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
+            LOG.warning("Gemini script model %s temporarily unavailable (%s)",
+                        model, type(exc).__name__)
             return None
-    LOG.warning("No accessible Gemini model for this project; using sourced RSS fallback")
     return None
 
-def news_and_script(_client,now,weather):
-    groups=rss_news(now)
-    selected=selected_stories(groups)
-    sources=[
-        {"url":item["url"],"title":item["publisher"]+": "+item["title"]}
-        for section in selected.values() for item in section
-    ]
-    script=optional_gemini_script(now,groups,weather)
-    mode="Gemini free-tier script" if script else "attributed RSS fallback"
+
+def news_and_script(_client, now, weather):
+    """Produce full editorial plan, sourced script and source-note records."""
+    groups = rss_news(now)
+    recent = editorial.load_history(
+        required("GITHUB_REPOSITORY"), required("GH_TOKEN"), now
+    )
+    edition = editorial.curate(groups, recent, now)
+    script = optional_gemini_script(now, edition, weather)
+    mode = "Gemini edited brief" if script else "source-attributed RSS fallback"
     if script is None:
-        script=fallback_readout(now,groups,weather)
-    LOG.info("News script mode: %s; %s words",mode,len(script.split()))
-    notes="Original sourced headlines and independent local weather. "+mode
-    return notes,sources,script
+        script = fallback_readout(now, edition, weather)
+    script = editorial.speaking_text(script)
+    if mode == "Gemini edited brief":
+        quality = editorial.script_quality(script, edition, now)
+    else:
+        quality = {
+            "script_words": len(script.split()),
+            "fallback_shorter_than_target": True,
+            "selected_stories": edition["count"],
+        }
+    edition["script_mode"] = mode
+    edition["script_quality"] = quality
+    LOG.info(
+        "Editorial edition: %s selected stories, %s related-source topics, "
+        "%s past topics consulted, %s repeated topics skipped; script=%s (%s words)",
+        edition["count"], edition["related_source_count"],
+        edition["history_items_consulted"], edition["repeated_topics_avoided"],
+        mode, len(script.split()),
+    )
+    return (
+        editorial.source_notes(edition),
+        editorial.edition_sources(edition),
+        script,
+        edition,
+    )
+
 
 def _tts_asset(url,path,min_size):
     if path.exists() and path.stat().st_size>=min_size:
