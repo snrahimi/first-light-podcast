@@ -389,6 +389,10 @@ def speaking_text(script):
         r"\bEU\b": "European Union",
         r"\bAI\b": "artificial intelligence",
         r"\bWHO\b": "World Health Organization",
+        r"\bIMF\b": "International Monetary Fund",
+        r"\bCISA\b": "Cybersecurity and Infrastructure Security Agency",
+        r"\bBLS\b": "Bureau of Labor Statistics",
+        r"\bU\.N\.(?=\s|$)": "United Nations",
     }
     result = script
     for pattern, replacement in words.items():

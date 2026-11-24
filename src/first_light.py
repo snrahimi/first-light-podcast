@@ -27,12 +27,13 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus
 else:
     import editorial
     import newsroom3
     import research33
     import broadcast32
+    import quality2plus
 import base64
 import io
 import wave
@@ -430,6 +431,32 @@ def weather_narration(w):
     return " ".join(lines)
 
 
+SEVERE_LOCAL_ALERT_NAMES = (
+    "tornado warning", "flash flood warning", "severe thunderstorm warning",
+    "extreme heat warning", "hurricane warning", "hurricane watch",
+    "tornado watch", "flash flood emergency", "evacuation warning",
+)
+
+
+def early_weather_alert_intro(weather):
+    """Give verified severe NWS alerts an early mention without inventing them."""
+    if weather.get("nws_alert_check") != "checked":
+        return ""
+    alerts = weather.get("nws_active_alerts") or []
+    for entry in alerts:
+        alert = re.sub(r"\s+", " ", str(entry)).strip()
+        if any(word in alert.lower() for word in SEVERE_LOCAL_ALERT_NAMES):
+            if len(alert) > 170:
+                alert = alert[:170].rsplit(" ", 1)[0]
+            alert = alert.rstrip(".,;:")
+            return (
+                "Before the world news, an important local weather notice. "
+                "The National Weather Service lists an active alert: "
+                + alert + ". Please check the official alert for current guidance."
+            )
+    return ""
+
+
 def fallback_readout(now, edition, weather):
     """Honest, short source-attributed episode if Gemini script API unavailable.
 
@@ -444,6 +471,9 @@ def fallback_readout(now, edition, weather):
         "The original publisher reports are linked in the show notes. "
         "When details are still emerging, we will say so rather than speculate.",
     ]
+    priority_weather = early_weather_alert_intro(weather)
+    if priority_weather:
+        parts.append(priority_weather)
     leadin = {
         "Top world headlines": "First, two major stories leading the day.",
         "Around the world": "Now, a quick look at developments around the world.",
@@ -679,6 +709,7 @@ def news_and_script(_client, now, weather):
         now, edition, dossiers, weather_narration(weather),
         os.getenv("GEMINI_API_KEY", "").strip(),
         os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+        early_alert_text=early_weather_alert_intro(weather),
     )
     mode = "Gemini segmented evidence-led 3.2" if script else "source-attributed RSS fallback"
     if script is None:
@@ -726,6 +757,19 @@ def news_and_script(_client, now, weather):
         dossiers, evidence_metrics, leads
     )
     edition["newsroom3_audit"]["phase33_research"] = research_metrics
+    quality_report = quality2plus.scorecard(
+        script, dossiers, edition, weather, mode
+    )
+    edition["quality_scorecard"] = quality_report
+    edition["newsroom3_audit"]["quality_scorecard"] = quality_report
+    LOG.info(
+        "Package 2+ editorial scorecard: %d story cards, %d source links, "
+        "%d sensitive review flags, %d possible repetition flags",
+        quality_report["selected_stories"],
+        quality_report["distinct_source_links"],
+        len(quality_report["sensitive_claims_for_review"]),
+        len(quality_report["possible_repeated_sentences"]),
+    )
     LOG.info(
         "Newsroom 3.0: %d curated stories, %d exact attributed claims, "
         "%d official feed items, %d discovery leads (not used as facts), "
@@ -738,6 +782,7 @@ def news_and_script(_client, now, weather):
         editorial.source_notes(edition) + "\n\n"
         + newsroom3.audit_notes(dossiers, evidence_metrics)
         + "\n\n" + research33.research_notes(dossiers, research_metrics)
+        + "\n\n" + quality2plus.public_notes(quality_report)
     )
     return notes, editorial.edition_sources(edition), script, edition
 
@@ -1350,6 +1395,7 @@ def main():
                 "preflight_duration_status": edition["script_quality"]["duration_preflight"]["status"],
                 "preflight_shortfall_seconds": edition["script_quality"]["duration_preflight"]["shortfall_seconds"],
                 "preflight_shortfall_words": edition["script_quality"]["duration_preflight"]["shortfall_words"],
+                "quality_scorecard": edition["quality_scorecard"],
                 "evidence_audit_url": base + "/evidence.json",
                 "discovery_links_used_as_facts": False,
             },
