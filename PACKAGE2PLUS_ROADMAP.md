@@ -82,7 +82,7 @@ existing live production evidence. "Partial" means only some safeguards exist.
 | F. Audio/pronunciation QA | Partial 2+.3 | Common official acronyms and MP3 integrity checks; no full proper-name QA or automated clipping scan |
 | G. Rolling 30-day quality report | Implemented 2+.4 | Completeness, Charon duration, fallback, official page and text-request metrics only for releases with health metadata |
 
-## Package 2+.6: Editorial depth and broadcast consistency (validation pending)
+## Package 2+.6: Editorial depth and broadcast consistency (CI passed, live pending)
 
 **Production basis:** November 24 Package 2+.5 live run #45473188568
 published a 541-word, 206.9-second Charon episode. Both Gemini writer
@@ -129,7 +129,7 @@ and both top world leads were United Nations press releases.
 
 ### Acceptance
 
-- Offline regression suite on PR and merged main must pass, including
+- PR validation passed: 114 offline tests and Python compilation. Re-check merged main CI. Regression coverage includes
   validated issuer-only agency extraction, exclusion of unrelated paragraphs,
   source-bounded excerpt selection, factual/number gate, high-impact
   exceptions to publisher diversity, and zero added Gemini API calls.
