@@ -458,70 +458,111 @@ def early_weather_alert_intro(weather):
     return ""
 
 
-def fallback_readout(now, edition, weather):
-    """Honest, short source-attributed episode if Gemini script API unavailable.
+def _source_depth_for_fallback(story, card):
+    """Optional additional, already source-checked excerpts for a spoken brief.
 
-    A limited feed summary is never padded with invented context to reach
-    the six-minute target. Such a fallback can be noticeably shorter.
+    Never invent background or treat related reports as independent proof.
+    Only validated dossier claims/official excerpts are used. Avoid duplicated
+    title/summary prose, and avoid reading long publisher text verbatim.
+    """
+    if not isinstance(card, dict):
+        return []
+    used = {tidy(story.get("title", ""), 180).lower(),
+            tidy(story.get("short_summary", ""), 180).lower()}
+    details, seen_sources = [], set()
+    for claim in card.get("claim_ledger", []):
+        if claim.get("evidence_field") != "summary":
+            continue
+        publisher = claim.get("publisher", "")
+        excerpt = tidy(claim.get("evidence", ""), 150)
+        low = excerpt.lower()
+        if (len(excerpt.split()) < 7 or not publisher or
+                any(low in old or old in low for old in used if old)):
+            continue
+        key = (publisher, claim.get("source_url"))
+        if key in seen_sources and len(details) >= 1:
+            continue
+        used.add(low)
+        seen_sources.add(key)
+        details.append(f"{publisher} adds: {excerpt}.")
+        if len(details) >= 2:
+            break
+    if len(details) < 2:
+        for document in card.get("official_context", []):
+            publisher = document.get("publisher", "")
+            for paragraph in document.get("excerpts", []):
+                excerpt = tidy(paragraph, 160)
+                low = excerpt.lower()
+                if (len(excerpt.split()) < 10 or not publisher or
+                        any(low in old or old in low for old in used if old)):
+                    continue
+                details.append(f"In its published statement, {publisher} says: {excerpt}.")
+                used.add(low)
+                break
+            if len(details) >= 2:
+                break
+    return details[:2]
+
+
+def fallback_readout(now, edition, weather, dossiers=None):
+    """Source-first fallback with optional extra audited context, no padding.
+
+    Replaces repetitious per-story disclaimers with distinct excerpts only
+    where the selected source dossiers genuinely contain more information.
+    A briefing shorter than five minutes is still preferable to invented news.
     """
     parts = [
         f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}.",
-        "This is First Light: World Report, your short and carefully sourced "
-        "look at the day ahead. Our briefing is produced with artificial "
-        "intelligence assistance and reviewed by automated source checks. "
-        "The original publisher reports are linked in the show notes. "
-        "When details are still emerging, we will say so rather than speculate.",
+        "This is First Light: World Report, with the day's international "
+        "developments, business, science, technology and local weather. "
+        "This briefing is produced with artificial intelligence assistance. "
+        "Claims are attributed to publishers and agencies, not independently "
+        "fact checked by our automated newsroom. Source links are in the show notes.",
     ]
     priority_weather = early_weather_alert_intro(weather)
     if priority_weather:
         parts.append(priority_weather)
     leadin = {
-        "Top world headlines": "First, two major stories leading the day.",
-        "Around the world": "Now, a quick look at developments around the world.",
-        "Business and markets": "Turning to the economy and business.",
-        "Science": "In science today.",
+        "Top world headlines": "We begin with the leading world developments.",
+        "Around the world": "Elsewhere around the world.",
+        "Business and markets": "Now, business and markets.",
+        "Science": "In science.",
         "Technology and cybersecurity": "And in technology and cybersecurity.",
     }
     for section, stories in edition["rundown"].items():
         if not stories:
             continue
-        parts.append(leadin[section])
-        for story in stories:
-            parts.append(f"{story['publisher']} reports: {story['title'].rstrip('.!')}.")
-            summary = story.get("short_summary", "").strip(".! ")
-            if (summary and summary.lower() not in story["title"].lower()
-                    and story["title"].lower() not in summary.lower()):
-                parts.append(f"The outlet's brief description adds: {tidy(summary, 140)}.")
-            if story["related_reports"]:
-                other = story["related_reports"][0]
-                parts.append(
-                    f"{other['publisher']} also carries reporting on this developing topic. "
-                    "Details and context should be checked against the original reports."
-                )
-            else:
-                parts.append(
-                    "That headline comes from one publisher's feed in this briefing. "
-                    "Additional details have not been independently confirmed here."
-                )
+        parts.append(leadin.get(section, "Next."))
+        for index, story in enumerate(stories):
+            publisher = tidy(story["publisher"], 80)
+            title = tidy(story["title"], 220).rstrip(".!")
+            parts.append(f"{publisher} reports: {title}.")
+            summary = tidy(story.get("short_summary", ""), 165).rstrip(".!")
+            if (len(summary.split()) >= 6 and
+                    summary.lower() not in title.lower() and
+                    title.lower() not in summary.lower()):
+                parts.append(f"In its summary, {publisher} adds: {summary}.")
+            card = None
+            if isinstance(dossiers, dict):
+                cards = dossiers.get(section, [])
+                if index < len(cards) and cards[index].get("headline") == story["title"]:
+                    card = cards[index]
+            parts.extend(_source_depth_for_fallback(story, card))
             if story.get("coverage_status") == "related_update_unverified":
                 parts.append(
-                    "We covered related news recently. The new reporting may "
-                    "contain developments worth following; check the source for details."
+                    "This topic appeared in an earlier briefing. The new report "
+                    "should not be treated as a confirmed change without checking "
+                    "its original evidence."
                 )
     parts.extend([
-        "A quick note on financial figures. This broadcast does not quote "
-        "market index levels or prices without verified timestamps. "
-        "On weekends and public holidays, the last available closing values "
-        "may be from an earlier trading session.",
         weather_narration(weather),
-        "As the day unfolds, watch for updates to the stories we just covered. "
-        "Early reports can change as officials and journalists release new information. "
-        "The episode page includes our source list and a place to request corrections.",
-        "That is First Light: World Report. Thanks for spending your morning "
-        "with us. Stay informed, and have a good day.",
+        "For developments and corrections, consult the linked original "
+        "reporting and our public evidence notes. Breaking reports and "
+        "early figures can change as more information becomes available.",
+        "That is First Light: World Report. Thanks for listening, "
+        "and have a thoughtful day.",
     ])
     return re.sub(r"\s+", " ", " ".join(parts)).strip()
-
 
 def optional_gemini_script(now, edition, weather, dossiers=None):
     """One bounded scriptwriting request per available free-tier model."""
@@ -694,9 +735,11 @@ def news_and_script(_client, now, weather):
     official, leads = newsroom3.collect_source_expansion(now)
     groups = newsroom3.augment_groups(groups, official)
     recent = editorial.load_history(
-        required("GITHUB_REPOSITORY"), required("GH_TOKEN"), now
+        required("GITHUB_REPOSITORY"), required("GH_TOKEN"), now,
+        fallback_url=public_base().rstrip("/") + "/memory.json",
     )
     edition = editorial.curate(groups, recent, now)
+    edition["history_for_backup"] = recent
     dossiers = newsroom3.build_dossiers(edition, leads)
     # Enrich already selected stories with high-overlap, traceable feed
     # reports. Run the exact-source ledger check AFTER any added excerpts.
@@ -714,7 +757,7 @@ def news_and_script(_client, now, weather):
     )
     mode = "Gemini segmented evidence-led 3.2" if script else "source-attributed RSS fallback"
     if script is None:
-        script = fallback_readout(now, edition, weather)
+        script = fallback_readout(now, edition, weather, dossiers)
         LOG.warning(
             "Segmented Gemini writing unavailable (%s); using source-attributed fallback",
             draft_stats.get("reason", "unknown")
@@ -729,7 +772,7 @@ def news_and_script(_client, now, weather):
                 "Gemini script failed editorial/evidence acceptance (%s); "
                 "using sourced fallback", str(exc)[:140]
             )
-            script = editorial.speaking_text(fallback_readout(now, edition, weather))
+            script = editorial.speaking_text(fallback_readout(now, edition, weather, dossiers))
             mode = "source-attributed RSS fallback"
             draft_stats["reason"] = "editorial_or_evidence_gate"
     if mode != "Gemini segmented evidence-led 3.2":
@@ -1339,8 +1382,11 @@ def xml_feed(releases, base):
     ET.SubElement(ch, "{http://www.w3.org/2005/Atom}link",
                   {"href": base + "/feed.xml", "rel": "self", "type": "application/rss+xml"})
     for release in releases:
+        # Never accidentally serve a revision archive in the podcast feed.
+        # The release also contains revision1.mp3, revision2.mp3, etc.
+        original_name = release["tag_name"] + ".mp3"
         audio = next((a for a in release.get("assets", [])
-                      if a.get("name", "").endswith(".mp3")), None)
+                      if a.get("name") == original_name), None)
         if audio is None:
             continue
         item = ET.SubElement(ch, "item")
@@ -1472,6 +1518,11 @@ def main():
     history = monitor2plus.rolling_report(releases, now.date())
     (SITE / "health.json").write_text(
         json.dumps(history, indent=2), encoding="utf-8"
+    )
+    (SITE / "memory.json").write_text(
+        json.dumps(editorial.memory_snapshot(
+            edition, edition.get("history_for_backup", []), now
+        ), ensure_ascii=False, indent=2), encoding="utf-8"
     )
     health_lines = [
         ("Episodes published in 30-day calendar window", history["episodes_found"]),
