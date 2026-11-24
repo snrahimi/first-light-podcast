@@ -273,3 +273,36 @@ MP3 duration remains authoritative.
 The enhancements do not change Gemini API request count (still two
 text-writing calls), the required Charon voice, billing, or the
 normal GitHub Actions daily schedule.
+
+## Package 2+: Intelligent Newsroom
+
+[Full 53-feature implementation roadmap and acceptance ledger](PACKAGE2PLUS_ROADMAP.md)
+
+Package 2+ adds:
+
+- **Writer resilience:** a maximum of three text requests per section on
+  temporary 5xx/connection faults, 429 fail-fast, and source+model
+  fingerprinted, 12-hour cached sections between GitHub Actions runs.
+- **Source-first editorial intelligence:** selected-story paraphrase/event
+  matching, modest evidence-aware ranking, provenance/freshness metadata,
+  explicit sensitivity and uncertain-fact review markers.
+- **Broadcast quality controls:** Charon speaking-time preflight, public
+  editorial scorecard, repetition and numeric-disagreement review flags,
+  priority severe NWS announcements when the alert feed was checked, and
+  a compact official-acronym pronunciation list.
+- **GitHub-only operations:** public health.json and health.html rolling
+  production reports, daily 6:15 AM America/Chicago delivery watchdog, one
+  deduplicated GitHub issue per failed daily check, a public correction
+  request template, and versioned backup audio/transcript/audit/notes on
+  same-date regeneration. A failed archive blocks replacement.
+
+The daily producer remains on the free-data path and only Gemini Charon
+may narrate. New writing requests are bounded, not unlimited. No paid
+provider, extra voice or broad web scraper has been enabled.
+
+**Important:** Phase 2+ code and offline tests do not prove that the
+next live broadcast will reach five minutes or be independently fact
+checked. The initial release archive and rolling reporting start with
+newly produced episodes; older health metrics may be unavailable. Check
+[the living roadmap](PACKAGE2PLUS_ROADMAP.md) for capabilities still
+partial or deferred.
