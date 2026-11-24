@@ -35,6 +35,47 @@ def reply(script):
 
 
 class Broadcast32Tests(unittest.TestCase):
+    def test_duration_preflight_reports_shortfall_without_padding(self):
+        result = broadcast32.duration_preflight(529)
+        self.assertFalse(result["estimated_in_target"])
+        self.assertEqual(result["status"], "estimated_short")
+        self.assertEqual(result["minimum_target_words"], 815)
+        self.assertEqual(result["shortfall_words"], 286)
+        self.assertGreater(result["shortfall_seconds"], 90)
+        self.assertTrue(broadcast32.duration_preflight(925)[
+            "estimated_in_target"])
+        self.assertEqual(broadcast32.duration_preflight(1150)[
+            "status"], "estimated_long")
+        with self.assertRaises(ValueError):
+            broadcast32.duration_preflight(150, wpm=0)
+
+    def test_more_distinct_evidence_increases_supported_story_budget(self):
+        sparse = {"Top world headlines": [{
+            "headline": "Limited world report",
+            "evidence": [{"publisher": "BBC", "text": "A single dated claim."}],
+            "official_context": [],
+        }]}
+        rich = {"Top world headlines": [{
+            "headline": "Supported world report",
+            "evidence": [
+                {"publisher": "BBC", "text": f"Distinct statement {n}"}
+                for n in range(5)
+            ],
+            "official_context": [
+                {"agency": "United Nations Press Releases",
+                 "quoted_excerpt": "Agency statement."}
+            ],
+        }]}
+        a = broadcast32._editorial_beat_plan(sparse)[0]
+        b = broadcast32._editorial_beat_plan(rich)[0]
+        self.assertGreater(b["suggested_words_if_supported"],
+                           a["suggested_words_if_supported"])
+        self.assertEqual(a["distinct_attributed_excerpts"], 1)
+        prompt = broadcast32._prompt(NOW, "world", rich, 400)
+        self.assertIn("STORY PLAN", prompt)
+        self.assertIn("strict source boundaries".upper(), prompt)
+        self.assertIn("Do not repeat the same fact", prompt)
+
     def test_charon_measured_speech_rate(self):
         self.assertEqual(broadcast32.estimate_duration(657), 242)
         self.assertTrue(300 <= broadcast32.estimate_duration(925) <= 420)
