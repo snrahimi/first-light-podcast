@@ -43,10 +43,10 @@ class Broadcast32Tests(unittest.TestCase):
         edition, dossiers = edition_and_dossiers()
         world = ("According to BBC and NPR, the news coverage describes a "
                  "developing international diplomatic discussion without confirmed "
-                 "new agreements. Details remain limited. " * 51)
+                 "new agreements. Details remain limited. " * 20)
         briefs = ("The Guardian and NASA provide source-linked reports, with "
                   "scientific and economic claims attributed to the relevant "
-                  "publishing agencies. No unsupported outcomes are announced. " * 37)
+                  "publishing agencies. No unsupported outcomes are announced. " * 18)
         calls = []
         def fake_post(url, **kw):
             calls.append(kw["json"]["contents"][0]["parts"][0]["text"])
