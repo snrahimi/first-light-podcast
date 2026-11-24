@@ -43,14 +43,30 @@ jobs:
       - name: Run offline tests
         run: python -m unittest discover -s tests -v
 
+      - name: Restore matching evidence-fingerprinted script sections
+        uses: actions/cache/restore@v4
+        with:
+          path: .first-light-cache
+          key: ${{ runner.os }}-first-light-script-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-first-light-script-
+
       - name: Generate and publish free podcast
         env:
+          FIRST_LIGHT_SCRIPT_CACHE_DIR: .first-light-cache
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           FEED_BASE_URL: ${{ vars.FEED_BASE_URL }}
         run: python -m src.first_light
+
+      - name: Preserve validated script sections for same-evidence retries
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .first-light-cache
+          key: ${{ runner.os }}-first-light-script-${{ github.run_id }}
 
       - name: Upload Pages site
         uses: actions/upload-pages-artifact@v5

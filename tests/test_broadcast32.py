@@ -1,5 +1,6 @@
 """Offline tests for evidence-first, two-part writing and Charon runtime."""
 import json
+import tempfile
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
@@ -109,6 +110,89 @@ class Broadcast32Tests(unittest.TestCase):
         self.assertGreater(meta["total_words"], 800)
         self.assertEqual(broadcast32.quality(script, edition, NOW)["script_words"],
                          meta["total_words"])
+
+    def test_transient_503_retries_only_failed_section(self):
+        edition, dossiers = edition_and_dossiers()
+        one = "BBC reports updates to international diplomatic discussions. " * 30
+        two = "NASA and NPR report economic and scientific developments. " * 30
+        calls, naps = [], []
+        def post(url, **kw):
+            calls.append(len(calls))
+            return (reply(one) if len(calls) == 1 else
+                    SimpleNamespace(status_code=503) if len(calls) == 2 else
+                    reply(two))
+        script, meta = broadcast32.generated_script(
+            NOW, edition, dossiers, "Weather unavailable.",
+            "test", "gemini-3.5-flash-lite", post=post,
+            sleep=naps.append)
+        self.assertIsNotNone(script)
+        self.assertEqual(meta["provider_calls"], 3)
+        self.assertEqual(meta["retries"], 1)
+        self.assertEqual(len(naps), 1)
+
+    def test_http_503_exhaustion_is_bounded(self):
+        calls, sleeps = [], []
+        def post(*args, **kwargs):
+            calls.append(1)
+            return SimpleNamespace(status_code=503)
+        result = broadcast32._call_gemini(
+            "test", "gemini-3.5-flash-lite", "sample",
+            post=post, sleep=sleeps.append)
+        self.assertIsNone(result)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(sleeps), 2)
+
+    def test_cached_completed_section_recovers_after_second_section_fails(self):
+        edition, dossiers = edition_and_dossiers()
+        lead = "BBC reports international diplomatic developments. " * 32
+        briefs = "NASA and NPR report scientific and economic topics. " * 30
+        with tempfile.TemporaryDirectory() as cache_dir:
+            first_calls = []
+            def first_post(*args, **kwargs):
+                first_calls.append(1)
+                return reply(lead) if len(first_calls) == 1 else SimpleNamespace(
+                    status_code=429)
+            script, meta = broadcast32.generated_script(
+                NOW, edition, dossiers, "Weather unavailable.",
+                "test", "gemini-3.5-flash-lite", post=first_post,
+                cache_dir=cache_dir, sleep=lambda _: None)
+            self.assertIsNone(script)
+            self.assertEqual(meta["provider_calls"], 2)
+            next_calls = []
+            def second_post(*args, **kwargs):
+                next_calls.append(1)
+                return reply(briefs)
+            script, meta = broadcast32.generated_script(
+                NOW, edition, dossiers, "Weather unavailable.",
+                "test", "gemini-3.5-flash-lite", post=second_post,
+                cache_dir=cache_dir, sleep=lambda _: None)
+            self.assertIsNotNone(script)
+            self.assertEqual(len(next_calls), 1)
+            self.assertEqual(meta["cache_hits"], 1)
+            self.assertEqual(meta["provider_calls"], 1)
+
+    def test_cache_identity_prevents_stale_source_reuse(self):
+        import os
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as cache_dir:
+            p = "Prompt for Tuesday, updated official story"
+            broadcast32._remember_section(
+                cache_dir, "gemini-3.5-flash-lite", p,
+                "BBC reports international verified statements. " * 32)
+            self.assertIsNone(broadcast32._cached_section(
+                cache_dir, "gemini-3.5-flash-lite", p + " revised"))
+            self.assertIsNone(broadcast32._cached_section(
+                cache_dir, "different-model", p))
+            matching = broadcast32._cached_section(
+                cache_dir, "gemini-3.5-flash-lite", p)
+            self.assertIsNotNone(matching)
+            path = broadcast32._cache_path(
+                cache_dir, "gemini-3.5-flash-lite", p)
+            raw = json.loads(path.read_text())
+            raw["created"] -= 13 * 3600
+            path.write_text(json.dumps(raw))
+            self.assertIsNone(broadcast32._cached_section(
+                cache_dir, "gemini-3.5-flash-lite", p))
 
     def test_provider_http_429_stops_before_second_request(self):
         edition, dossiers = edition_and_dossiers()
