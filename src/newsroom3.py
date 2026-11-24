@@ -341,6 +341,45 @@ def validate_dossiers(dossiers):
             "method": "exact-source-excerpt matching, NOT truth adjudication"}
 
 
+def _weather_numeric_tokens(weather):
+    """Allow provider-supplied weather numerals and our spoken rounding.
+
+    The weather reader uses round() on measured temperature, high, low,
+    rain probability and wind. For example, a structured value of 67.2
+    becomes "67" in the spoken script. The evidence gate must accept that
+    rounding without permitting unrelated invented statistics.
+    """
+    tokens = set()
+    rounded_fields = {
+        "temperature_f", "high_f", "low_f",
+        "max_rain_percent", "wind_mph",
+    }
+
+    def collect(value):
+        if value is None or isinstance(value, bool):
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                collect(item)
+        elif isinstance(value, (tuple, list)):
+            for item in value:
+                collect(item)
+        elif isinstance(value, (int, float, str)):
+            tokens.update(NUMBER.findall(str(value)))
+
+    if not isinstance(weather, dict):
+        return tokens
+    collect(weather)
+    for name in rounded_fields:
+        value = weather.get(name)
+        if isinstance(value, (float, int)) and not isinstance(value, bool):
+            try:
+                tokens.add(str(round(value)))
+            except (ValueError, OverflowError):
+                pass
+    return tokens
+
+
 def script_numeric_gate(script, dossiers, weather, now):
     """Reject new digit-based figures not in supplied evidence or weather.
 
@@ -354,8 +393,9 @@ def script_numeric_gate(script, dossiers, weather, now):
         for chapter in dossiers.values()
         for dossier in chapter
         for claim in dossier["claim_ledger"]
-    ) + " " + " ".join(str(v) for v in weather.values() if v is not None)
+    )
     expected = set(NUMBER.findall(evidence))
+    expected.update(_weather_numeric_tokens(weather))
     expected.update({str(now.year), str(now.day), "3.0", "5", "6", "7"})
     unexpected = sorted(set(NUMBER.findall(script)) - expected)
     if unexpected:
