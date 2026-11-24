@@ -1,0 +1,41 @@
+name: Report a First Light news correction
+description: Identify a factual or attribution issue in a published episode
+title: "[Correction] "
+labels: ["correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        First Light is an AI-assisted, source-attributed news briefing. Thank you for helping improve accuracy. Avoid sharing private or confidential information here: issues are public.
+  - type: input
+    id: episode
+    attributes:
+      label: Episode date (America/Chicago)
+      placeholder: "2026-11-24"
+      description: Which broadcast needs a correction?
+    validations:
+      required: true
+  - type: input
+    id: timestamp
+    attributes:
+      label: Audio timestamp (optional)
+      placeholder: "02:15"
+  - type: textarea
+    id: statement
+    attributes:
+      label: Exact claim or error
+      description: Quote the smallest relevant phrase or describe the error clearly.
+      placeholder: "The segment said..."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and source URLs
+      description: Link to credible original sources, official records or direct statements.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Suggested correction (optional)
