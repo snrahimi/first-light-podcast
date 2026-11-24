@@ -961,14 +961,17 @@ def run_gh(*args, check=True):
     return subprocess.run(["gh", *args], text=True, capture_output=True, check=check)
 
 
-def publish_release(day, mp3, transcript, notes):
+def publish_release(day, mp3, transcript, notes, audit=None):
     tag = "first-light-" + day
     title = f"{TITLE} | {day}"
+    assets = [str(mp3), str(transcript)]
+    if audit is not None:
+        assets.append(str(audit))
     if run_gh("release", "view", tag, check=False).returncode == 0:
-        run_gh("release", "upload", tag, str(mp3), str(transcript), "--clobber")
+        run_gh("release", "upload", tag, *assets, "--clobber")
         run_gh("release", "edit", tag, "--title", title, "--notes-file", str(notes))
     else:
-        run_gh("release", "create", tag, str(mp3), str(transcript),
+        run_gh("release", "create", tag, *assets,
                "--title", title, "--notes-file", str(notes), "--latest")
 
 
@@ -1079,6 +1082,7 @@ audio{{display:block;width:100%;margin:30px 0}}
 <audio controls preload="metadata" src="latest.mp3?date={day}"></audio>
 <p><a href="latest.mp3?date={day}">Download this episode</a> ·
 <a href="feed.xml">Subscribe with RSS</a> ·
+<a href="evidence.json">Newsroom source audit</a> ·
 <a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
 <h2>Sources</h2><ol>{links}</ol>
 <h2>Transcript</h2><p>{html.escape(transcript)}</p>
@@ -1118,6 +1122,11 @@ def main():
         + editorial.memory_note(edition),
         encoding="utf-8",
     )
+    evidence_path = WORK / f"first-light-{day}-evidence.json"
+    evidence_path.write_text(
+        json.dumps(edition["newsroom3_audit"], indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
     mp3 = WORK / f"first-light-{day}.mp3"
     narrator = synthesize(script, mp3)
     audio_stats = inspect_audio(mp3)
@@ -1125,13 +1134,14 @@ def main():
     edition["audio_quality"] = audio_stats
     LOG.info("Pre-publish audio verified: %s, %.1f seconds, %s bps",
              narrator, audio_stats["duration_seconds"], audio_stats["bitrate_bps"])
-    publish_release(day, mp3, transcript, notes)
+    publish_release(day, mp3, transcript, notes, evidence_path)
     releases = list_releases(day)
     base = public_base()
 
     xml_feed(releases, base).write(SITE / "feed.xml", encoding="utf-8", xml_declaration=True)
     cover(SITE / "cover.png")
     shutil.copyfile(mp3, SITE / "latest.mp3")
+    shutil.copyfile(evidence_path, SITE / "evidence.json")
     (SITE / "latest.json").write_text(
         json.dumps({
             "date": day,
@@ -1147,6 +1157,10 @@ def main():
                 "related_source_topics": edition["related_source_count"],
                 "prior_topics_consulted": edition["history_items_consulted"],
                 "repeats_avoided": edition["repeated_topics_avoided"],
+                "evidence_claims": edition["newsroom3_audit"]["attributed_claims"],
+                "independently_verified_claims": 0,
+                "evidence_audit_url": base + "/evidence.json",
+                "discovery_links_used_as_facts": False,
             },
             "audio_quality": audio_stats,
         }, indent=2),
