@@ -525,9 +525,13 @@ SHOW STRUCTURE:
 * 30-second what-to-watch and a concise upbeat signoff.
 
 IMPORTANT EDITORIAL RULES:
-- The rundown contains selected recent headlines and SHORT publisher RSS
-  summaries. It does NOT contain full verified articles or independent
-  original research. Do not pretend that this is full investigative reporting.
+- The rundown contains recent publisher RSS summaries and, for a few
+  eligible official feeds, brief verbatim excerpts from the issuing agency's
+  public web page. Those excerpts document what the agency says; they do
+  NOT constitute independent fact-checking or full original reporting.
+- Your editorial context is strictly limited to these quoted, linked sources.
+  Never claim to have reviewed entire licensed articles or conducted
+  independent interviews.
 - Attribute consequential claims to the named publisher; distinguish
   reported claims, official statements and established facts. Never create
   quotes, amounts, statistics, causes, dates, explanations or outcomes
