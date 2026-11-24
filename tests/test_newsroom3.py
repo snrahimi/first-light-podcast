@@ -137,6 +137,45 @@ class Newsroom3Tests(unittest.TestCase):
             dossiers, weather, NOW)
         self.assertTrue(good["numeric_tokens_approved"])
 
+    def test_rounded_weather_numbers_are_supported_by_provider_data(self):
+        edition = editorial.curate(editorial_groups(), [], NOW)
+        dossiers = newsroom3.build_dossiers(edition, [])
+        weather = {
+            "source": "NWS period forecast",
+            "temperature_f": 67.3,
+            "high_f": 52.2,
+            "low_f": 48.4,
+            "max_rain_percent": 20.4,
+            "wind_mph": 9.6,
+            "peak_rain_chance_hours": [{"hour_local": "6:00 AM"}],
+        }
+        spoken = (
+            "First Light: World Report, November 23, 2026. "
+            "The current temperature is 67, high 52, low 48, "
+            "a 20 percent chance of rain, and winds at 10 miles per hour "
+            "with an increase at 6:00 AM."
+        )
+        self.assertTrue(
+            newsroom3.script_numeric_gate(spoken, dossiers, weather, NOW)[
+                "numeric_tokens_approved"]
+        )
+
+    def test_weather_rounding_does_not_allow_unrelated_numbers(self):
+        edition = editorial.curate(editorial_groups(), [], NOW)
+        dossiers = newsroom3.build_dossiers(edition, [])
+        weather = {"source": "NWS period forecast", "high_f": 67.3}
+        with self.assertRaisesRegex(ValueError, "Unsupported numeric.*999"):
+            newsroom3.script_numeric_gate(
+                "Today is November 23, 2026. The forecast high is 67. "
+                "This report claims an unrelated 999 cases.", dossiers,
+                weather, NOW)
+
+    def test_boolean_weather_flags_do_not_create_numeric_support(self):
+        self.assertNotIn(
+            "1",
+            newsroom3._weather_numeric_tokens({"nws_alert_check": True})
+        )
+
     def test_public_audit_is_explicit_about_method(self):
         edition = editorial.curate(editorial_groups(), [], NOW)
         dossiers = newsroom3.build_dossiers(edition, [])
