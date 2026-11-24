@@ -283,6 +283,27 @@ def tidy(text, limit=220):
     text = re.sub(r"\s+", " ", text).strip()
     return text[:limit].rsplit(" ", 1)[0] if len(text) > limit else text
 
+def _trusted_feed_link(publisher, url):
+    """Basic publisher-domain provenance check for untrusted RSS entries."""
+    domains = {
+        "BBC": ("bbc.com", "bbc.co.uk"),
+        "NPR": ("npr.org",),
+        "The Guardian": ("theguardian.com",),
+        "Guardian": ("theguardian.com",),
+        "Al Jazeera": ("aljazeera.com",),
+    }
+    allowed = next(
+        (hosts for prefix, hosts in domains.items() if publisher.startswith(prefix)),
+        (),
+    )
+    hostname = (urlsplit(url).hostname or "").lower()
+    return (
+        urlsplit(url).scheme == "https"
+        and bool(allowed)
+        and any(hostname == host or hostname.endswith("." + host) for host in allowed)
+    )
+
+
 def rss_news(now):
     """Discover recent source *candidates*, retaining overlapping reports.
 
@@ -309,7 +330,7 @@ def rss_news(now):
                 title = tidy(story.get("title"), 180)
                 link = str(story.get("link", ""))
                 stamp = story.get("published_parsed") or story.get("updated_parsed")
-                if not title or not link.startswith("https://") or not stamp:
+                if not title or not stamp or not _trusted_feed_link(name, link):
                     continue
                 dt = datetime.fromtimestamp(calendar.timegm(stamp), timezone.utc)
                 age = (now.astimezone(timezone.utc) - dt).total_seconds() / 3600
