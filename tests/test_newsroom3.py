@@ -93,6 +93,24 @@ class Newsroom3Tests(unittest.TestCase):
         self.assertEqual(len(merged["science"]), len(groups["science"]) + 1)
         self.assertEqual(len(groups["science"]), 1)
 
+    def test_dossiers_expose_freshness_evidence_and_sensitive_review(self):
+        edition = editorial.curate(editorial_groups(), [], NOW)
+        dossiers = newsroom3.build_dossiers(edition, [])
+        cards = [item for chapter in dossiers.values() for item in chapter]
+        self.assertTrue(cards)
+        self.assertTrue(all("evidence_depth" in card for card in cards))
+        self.assertTrue(all(
+            card["freshness"]["background_is_not_new_reporting"]
+            for card in cards
+        ))
+        self.assertTrue(all(
+            card["editorial_review"]["human_fact_check_completed"] is False
+            for card in cards
+        ))
+        writer = newsroom3.writer_material(dossiers)
+        self.assertIn("freshness", next(iter(writer.values()))[0])
+        self.assertIn("editorial_review", next(iter(writer.values()))[0])
+
     def test_evidence_ledger_uses_exact_excerpt_not_discovery(self):
         edition = editorial.curate(editorial_groups(), [], NOW)
         leads = [{
