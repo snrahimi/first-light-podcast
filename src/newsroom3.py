@@ -31,6 +31,7 @@ LOG = logging.getLogger("firstlight.newsroom3")
 
 GDELT_API = "https://api.gdeltproject.org/api/v2/doc/doc"
 PRIMARY_RSS = (
+    ("world", "United Nations Press Releases", "https://press.un.org/en/rss.xml", "press.un.org"),
     ("science", "NASA News Releases", "https://www.nasa.gov/news-release/feed/", "nasa.gov"),
     ("business", "U.S. Bureau of Labor Statistics", "https://www.bls.gov/feed/bls_latest.rss", "bls.gov"),
 )
@@ -329,7 +330,8 @@ def validate_dossiers(dossiers):
                     allowed = (
                         ("nasa.gov",) if "nasa" in name else
                         ("bls.gov",) if "labor statistics" in name else
-                        ("cisa.gov",) if "cisa" in name else ()
+                        ("cisa.gov",) if "cisa" in name else
+                        ("press.un.org",) if "united nations press" in name else ()
                     )
                     if not allowed or not host_ok(source["url"], allowed):
                         raise ValueError("Primary claim does not link to its issuing agency")
