@@ -211,9 +211,9 @@ def augment_groups(groups, primary):
     for category, entries in primary.items():
         if category not in merged:
             continue
-        known = {(e["publisher"], e["url"]) for e in merged[category]}
+        known = {(e["publisher"], e["url"], e["title"]) for e in merged[category]}
         for entry in entries:
-            identity = (entry["publisher"], entry["url"])
+            identity = (entry["publisher"], entry["url"], entry["title"])
             if identity not in known:
                 merged[category].append(entry)
                 known.add(identity)
