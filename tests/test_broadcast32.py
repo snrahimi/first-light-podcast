@@ -130,6 +130,27 @@ class Broadcast32Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             broadcast32.quality("No source available " * 100, edition, NOW)
 
+    def test_spoken_ai_disclosure_is_accepted_after_pronunciation_expansion(self):
+        from src import editorial
+        edition, _ = edition_and_dossiers()
+        draft = (
+            "Good morning, San Antonio. This is First Light: World Report "
+            "for November 23, 2026. This report is produced with AI assistance. "
+            + "BBC reports international developments in world affairs. " * 75
+        )
+        voiced = editorial.speaking_text(draft)
+        self.assertIn("artificial intelligence assistance", voiced)
+        self.assertNotIn("AI assistance", voiced)
+        self.assertGreater(broadcast32.quality(voiced, edition, NOW)[
+            "script_words"], 480)
+        self.assertGreater(broadcast32.quality(draft, edition, NOW)[
+            "script_words"], 480)
+        with self.assertRaisesRegex(ValueError, "assistance disclosure"):
+            broadcast32.quality(
+                voiced.replace("artificial intelligence assistance",
+                               "automated source checks"), edition, NOW
+            )
+
     def test_writer_only_passes_bounded_evidence_cards(self):
         edition, dossiers = edition_and_dossiers()
         dossiers["Top world headlines"][0]["discovery_leads"] = [

@@ -362,6 +362,37 @@ class PodcastTests(unittest.TestCase):
         self.assertIn("high is near 52", script)
         self.assertIn("low is near 48", script)
 
+    def test_segmented_draft_survives_spoken_disclosure_conversion(self):
+        """Live-path regression: an authentic AI disclosure must not trigger
+        the RSS fallback after its pronunciation is expanded.
+        """
+        from tests_support import editorial_groups
+        now = datetime(2026, 11, 23, 5, 0,
+                       tzinfo=ZoneInfo("America/Chicago"))
+        weather = {"source": "unavailable",
+                   "nws_alert_check": "not verified", "nws_active_alerts": []}
+        valid = (
+            "Good morning San Antonio. This is First Light: World Report "
+            "in 2026 with AI assistance. "
+            + "According to BBC, international news coverage continues. " * 80
+        )
+        with patch.dict(os.environ, {
+            "GH_TOKEN": "test", "GITHUB_REPOSITORY": "a/b"
+        }), patch("src.first_light.rss_news",
+                  return_value=editorial_groups()), patch(
+            "src.first_light.editorial.load_history", return_value=[]
+        ), patch(
+            "src.first_light.newsroom3.collect_source_expansion",
+            return_value=({section: [] for section in editorial_groups()}, [])
+        ), patch("src.first_light.broadcast32.generated_script",
+                 return_value=(valid, {"provider_calls": 2})):
+            _, _, script, edition = news_and_script(None, now, weather)
+        self.assertEqual(edition["script_mode"],
+                         "Gemini segmented evidence-led 3.2")
+        self.assertIn("artificial intelligence assistance", script)
+        self.assertNotIn("source-attributed RSS fallback", script)
+        self.assertEqual(edition["script_quality"]["draft"]["provider_calls"], 2)
+
     def test_segmented_writer_unsourced_number_triggers_safe_fallback(self):
         from tests_support import editorial_groups
         now = datetime(2026, 11, 23, 5, 0,
