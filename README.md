@@ -2,7 +2,7 @@
 
 Automated 5–7-minute morning world news, business, science, technology and San Antonio weather podcast. Scheduled for 3:30 AM America/Chicago to prepare ahead of 5 AM.
 
-**This active daily workflow does not call paid OpenAI or ElevenLabs APIs.** It uses public news RSS feeds, local Kokoro speech (Piper backup), and optionally Gemini API's Free tier to write a better broadcast script.
+**The daily workflow uses no OpenAI or ElevenLabs APIs.** It uses public news RSS feeds, optional Gemini for the script, **Gemini 3.8 Flash TTS with the Charon voice as the preferred narrator**, and free local Kokoro FP16 (Adam) / Piper when Gemini narration is unavailable. Gemini use is subject to your project's billing configuration and applicable free limits.
 
 ## Add your optional Gemini Free tier key
 
@@ -35,7 +35,7 @@ Add a Daily 5:00 AM personal automation in Apple Shortcuts. Retrieve https://snr
 - Live headlines from BBC, NPR, Guardian and Al Jazeera news RSS, with date filters and linked sources; no copied full articles.
 - Local San Antonio forecast from Open-Meteo plus an attempted National Weather Service alert check.
 - Original narration generated using optional Free tier Gemini API or a simple attributed headline fallback.
-- Open-source local Kokoro 82M ONNX speech with Piper TTS fallback, encoded to MP3 with ffmpeg.
+- Preferred narration: the selected Gemini Charon voice via the configured `GEMINI_API_KEY`. Free local Kokoro FP16 voice `am_adam`, then Piper, are fallback narrators. Audio uses MP3 192 kbps with loudness normalization.
 - Episode archives in GitHub Releases, a podcast RSS feed and website in GitHub Pages.
 - All GitHub Pages and Releases podcast content is **public**, not a private feed.
 
@@ -50,3 +50,11 @@ Free Gemini quotas/models can change. Free services can throttle or fail. A publ
 Open-Meteo requests have bounded connection/read timeouts and retry temporary network failures. If Open-Meteo remains unreachable, the script attempts an official National Weather Service period forecast. If both providers are unavailable, the podcast explicitly says weather could not be verified and does **not** invent temperatures, wind or precipitation. National Weather Service alert checks are separate and can also be unavailable. This allows the episode to continue even if a weather provider is temporarily down.
 
 GitHub Actions were upgraded to Node.js 24-compatible releases for the daily pipeline and source validation.
+
+## GitHub Pages artifact indexing fix
+
+The upload can succeed before GitHub's Actions API reports the `github-pages` artifact to the deployment step. The production workflow grants `actions: read` and waits for the uploaded artifact to become visible (up to 90 seconds) before calling `deploy-pages@v5`. A separate `punycode` Node warning is nonfatal and originates within action dependencies.
+
+## Gemini Charon voice and usage
+
+The Charon audition was approved as the default daily narrator. The production workflow synthesizes the narration in sentence-aligned sections with the same model and voice configuration used in the audition, combines the resulting WAV sections, and encodes a 192 kbps MP3. If Gemini audio generation fails, Kokoro FP16 and then Piper run locally. **Google Gemini requests may incur charges if the API key is linked to a paid billing project**. Inspect the billing tier and usage limits of the project before enabling daily production. Free-tier availability and quotas can change.
