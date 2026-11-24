@@ -516,8 +516,8 @@ def fallback_readout(now, edition, weather, dossiers=None):
         "This is First Light: World Report, with the day's international "
         "developments, business, science, technology and local weather. "
         "This briefing is produced with artificial intelligence assistance. "
-        "Claims are attributed to publishers and agencies, not independently "
-        "fact checked by our automated newsroom. Source links are in the show notes.",
+        "We attribute claims to publishers and issuing agencies. Our automated "
+        "source checks do not establish their truth. Source links are in the show notes.",
     ]
     priority_weather = early_weather_alert_intro(weather)
     if priority_weather:
