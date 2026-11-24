@@ -9,7 +9,10 @@ from __future__ import annotations
 from collections import Counter
 import re
 
-from . import broadcast32
+if __package__:
+    from . import broadcast32
+else:
+    import broadcast32
 
 
 def _repeated_sentences(script):
