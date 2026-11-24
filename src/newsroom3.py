@@ -257,6 +257,7 @@ def claim_items(story):
                 "evidence_field": part,
                 "source_url": source["url"],
                 "publisher": source["publisher"],
+                "published": source.get("published"),
                 "evidence_status": "primary_statement" if source["primary"]
                                    else "attributed_publisher_report",
                 "independently_verified": False,
@@ -323,6 +324,15 @@ def validate_dossiers(dossiers):
                     raise ValueError("Claim not traceable to original source metadata")
                 if not host_ok(claim["source_url"], (urlsplit(claim["source_url"]).hostname,)):
                     raise ValueError("Evidence source has invalid URL")
+                if source["primary"]:
+                    name = source["publisher"].lower()
+                    allowed = (
+                        ("nasa.gov",) if "nasa" in name else
+                        ("bls.gov",) if "labor statistics" in name else
+                        ("cisa.gov",) if "cisa" in name else ()
+                    )
+                    if not allowed or not host_ok(source["url"], allowed):
+                        raise ValueError("Primary claim does not link to its issuing agency")
                 if claim.get("independently_verified") is not False:
                     raise ValueError("Unsupported claim of independent verification")
                 checked += 1
@@ -364,7 +374,7 @@ def writer_material(dossiers):
             "source_status": item["source_status"],
             "evidence": [{
                 "publisher": c["publisher"], "text": c["claim"],
-                "url": c["source_url"],
+                "url": c["source_url"], "published": c.get("published"),
                 "status": c["evidence_status"],
             } for c in item["claim_ledger"]],
             "uncertainties": item["uncertainties"],
