@@ -22,7 +22,10 @@ from urllib.parse import urlsplit
 import feedparser
 import requests
 
-from . import editorial
+if __package__:
+    from . import editorial
+else:
+    import editorial
 
 LOG = logging.getLogger("firstlight.newsroom3")
 
