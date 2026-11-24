@@ -154,7 +154,7 @@ def _nws_weather_backup(now):
         value = period.get("temperature")
         return value if isinstance(value, (int, float)) else None
     precip = [
-        p.get("probabilityOfPrecipitation", {}).get("value")
+        (p.get("probabilityOfPrecipitation") or {}).get("value")
         for p in periods
     ]
     precip = [p for p in precip if isinstance(p, (int, float))]
