@@ -1204,8 +1204,8 @@ def release_revision_notes(previous_body, *, now=None):
     )[-25:]
     if not lines:
         lines = [
-            "- Revision 1: An earlier published version existed; its original "
-            "audio may no longer be accessible."
+            "- Revision 1: An earlier published edition existed and its "
+            "audio, transcript, evidence and notes are archived."
         ]
     lines.append(
         f"- Revision {revision}: Automated same-date regeneration at "
@@ -1216,9 +1216,53 @@ def release_revision_notes(previous_body, *, now=None):
         "\n\n### Release revision history\n"
         + "\n".join(lines)
         + f"\n<!-- FIRST_LIGHT_REVISION_V1:{revision} -->\n"
-        + "Correction requests and editorial standards: "
+        + "Earlier assets are archived with revision-numbered filenames. "
+        "An automated regeneration is not a human correction.\n"
+        "Correction requests and editorial standards: "
         "https://github.com/snrahimi/first-light-podcast/blob/main/CORRECTIONS.md\n"
     )
+
+
+def archive_prior_release_assets(tag, prior_body):
+    """Preserve old MP3/transcript/evidence/notes before same-day replacement.
+
+    Abort the replacement when the existing files cannot be archived.
+    Automatically generated archives are explicitly versioned and public.
+    """
+    match = re.search(
+        r"<!-- FIRST_LIGHT_REVISION_V1:(\d{1,4}) -->",
+        prior_body or "",
+    )
+    revision = int(match.group(1)) if match else 1
+    assets_result = run_gh(
+        "release", "view", tag, "--json", "assets", "--jq",
+        ".assets[].name", check=False,
+    )
+    if assets_result.returncode != 0:
+        raise RuntimeError("Unable to inspect previous episode asset list")
+    present = set(assets_result.stdout.splitlines())
+    originals = (tag + ".mp3", tag + ".txt", tag + "-evidence.json")
+    if any(name not in present for name in originals):
+        raise RuntimeError("Previous release is incomplete; refusing replacement")
+    folder = WORK / "previous_revisions"
+    folder.mkdir(parents=True, exist_ok=True)
+    for original in originals:
+        downloaded = run_gh(
+            "release", "download", tag, "--pattern", original,
+            "--dir", str(folder), check=False,
+        )
+        path = folder / original
+        if downloaded.returncode != 0 or not path.exists() or not path.stat().st_size:
+            raise RuntimeError("Could not archive existing published episode")
+        suffix = original[len(tag):]
+        archived = folder / f"{tag}-revision{revision}{suffix}"
+        path.replace(archived)
+        run_gh("release", "upload", tag, str(archived), "--clobber")
+    prior_notes = folder / f"{tag}-revision{revision}-notes.md"
+    prior_notes.write_text(prior_body, encoding="utf-8")
+    run_gh("release", "upload", tag, str(prior_notes), "--clobber")
+    LOG.info("Archived previous public audio and evidence as release revision %d",
+             revision)
 
 
 def publish_release(day, mp3, transcript, notes, audit=None):
@@ -1234,11 +1278,12 @@ def publish_release(day, mp3, transcript, notes, audit=None):
         )
         if old.returncode != 0:
             raise RuntimeError("Cannot read prior release notes for revision audit")
+        archive_prior_release_assets(tag, old.stdout)
         with Path(notes).open("a", encoding="utf-8") as file:
             file.write(release_revision_notes(old.stdout))
         LOG.warning(
-            "Existing daily release will be regenerated with explicit "
-            "revision history. Older audio assets are not archived."
+            "Existing daily release will be regenerated. Previous audio, "
+            "transcript, evidence and notes have been archived."
         )
         run_gh("release", "upload", tag, *assets, "--clobber")
         run_gh("release", "edit", tag, "--title", title, "--notes-file", str(notes))
