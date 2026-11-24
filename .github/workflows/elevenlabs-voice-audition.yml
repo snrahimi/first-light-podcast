@@ -2,13 +2,22 @@ name: ElevenLabs Voice Audition (Manual Only)
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Diagnose only uses no TTS credits; generate_sample uses credits'
+        required: true
+        type: choice
+        default: diagnose_only
+        options:
+          - diagnose_only
+          - generate_sample
 
 permissions:
   contents: read
 
 jobs:
   private-voice-test:
-    name: Generate one 45-second voice comparison
+    name: Diagnose account or audition one voice
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -31,14 +40,21 @@ jobs:
       - name: Validate audition offline
         run: python -m unittest discover -s tests -p test_elevenlabs_audition.py -v
 
+      - name: Diagnose selected ElevenLabs voice (GET only, no audio credits)
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+        run: python -m src.elevenlabs_audition --diagnose
+
       - name: Synthesize bounded ElevenLabs sample
+        if: ${{ inputs.mode == 'generate_sample' }}
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
         run: python -m src.elevenlabs_audition
 
       - name: Store temporary audition audio (no Pages or Release publishing)
-        if: success()
+        if: ${{ inputs.mode == 'generate_sample' && success() }}
         uses: actions/upload-artifact@v4
         with:
           name: first-light-elevenlabs-review-sample
