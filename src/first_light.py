@@ -1342,11 +1342,14 @@ def main():
                 "evidence_claims": edition["newsroom3_audit"]["attributed_claims"],
                 "independently_verified_claims": 0,
                 "official_documents_reviewed": edition["newsroom3_audit"]["phase33_research"]["official_documents_checked"],
+                "official_document_fetches_attempted": edition["newsroom3_audit"]["phase33_research"]["official_document_fetches_attempted"],
+                "related_feed_reports_added": edition["newsroom3_audit"]["phase33_research"]["selected_story_related_feeds"],
                 "script_words": edition["script_quality"]["script_words"],
                 "estimated_spoken_seconds": edition["script_quality"]["estimated_duration_seconds"],
-                "script_target_duration_estimated": (
-                    300 <= edition["script_quality"]["estimated_duration_seconds"] <= 420
-                ),
+                "script_target_duration_estimated": edition["script_quality"]["duration_preflight"]["estimated_in_target"],
+                "preflight_duration_status": edition["script_quality"]["duration_preflight"]["status"],
+                "preflight_shortfall_seconds": edition["script_quality"]["duration_preflight"]["shortfall_seconds"],
+                "preflight_shortfall_words": edition["script_quality"]["duration_preflight"]["shortfall_words"],
                 "evidence_audit_url": base + "/evidence.json",
                 "discovery_links_used_as_facts": False,
             },
