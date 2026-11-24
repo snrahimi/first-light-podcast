@@ -229,7 +229,7 @@ class PodcastTests(unittest.TestCase):
              patch.dict(os.environ, {"GEMINI_API_KEY": ""}), \
              patch("src.first_light.requests.post") as post:
             destination = Path(temp) / "test.wav"
-            with self.assertRaisesRegex(RuntimeError, "API key is missing"):
+            with self.assertRaisesRegex(RuntimeError, "GEMINI_API_KEY missing"):
                 _tts_gemini("One sentence.", destination)
             self.assertFalse(destination.exists())
         post.assert_not_called()
