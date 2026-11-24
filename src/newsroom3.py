@@ -47,7 +47,7 @@ DANGEROUS_CLAIMS = re.compile(
     r"\b(independently verified|we verified|fact.checked|confirmed by multiple"
     r" independent sources|our reporting confirms)\b", re.I
 )
-NUMBER = re.compile(r"(?<![a-zA-Z0-9])[-+]?\d[\d,]*(?:\.\d+)?%?(?![a-zA-Z0-9])")
+NUMBER = re.compile(r"(?<![a-zA-Z0-9])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?(?![a-zA-Z0-9])")
 USER_AGENT = {"User-Agent": "FirstLightWorldReport/3.0 (source-linked daily briefing)"}
 
 
