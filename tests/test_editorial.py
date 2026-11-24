@@ -120,6 +120,14 @@ class EditorialTests(unittest.TestCase):
             "gross domestic product and artificial intelligence."
         )
 
+    def test_official_acronyms_expand_for_charon_narration(self):
+        text = editorial.speaking_text(
+            "The IMF and CISA discussed BLS data with the U.N.")
+        self.assertIn("International Monetary Fund", text)
+        self.assertIn("Cybersecurity and Infrastructure Security Agency", text)
+        self.assertIn("Bureau of Labor Statistics", text)
+        self.assertIn("United Nations", text)
+
     def test_script_gate_requires_identity_and_date(self):
         edition = editorial.curate(standard_groups(), [], self.now)
         valid = ("Good morning, this is First Light in San Antonio, 2026. "
