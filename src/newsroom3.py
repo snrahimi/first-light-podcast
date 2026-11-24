@@ -237,7 +237,7 @@ def claim_items(story):
     sources.extend({
         "publisher": s["publisher"], "url": s["url"],
         "title": s["title"], "summary": s.get("short_summary", ""),
-        "published": story["published"],
+        "published": s.get("published"),
         "primary": s.get("provenance", "").startswith("primary_"),
     } for s in story.get("related_reports", []))
     claims = []
