@@ -202,7 +202,7 @@ class PodcastTests(unittest.TestCase):
         self.assertGreaterEqual(edition["count"], 5)
         self.assertLessEqual(edition["count"], 8)
         self.assertTrue(edition["script_mode"].startswith("source-attributed"))
-        self.assertIn("AI assistance", script)
+        self.assertIn("artificial intelligence assistance", script)
         self.assertIn("not independent verification", notes)
         self.assertGreaterEqual(len(sources), 5)
 
