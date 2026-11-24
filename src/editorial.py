@@ -265,12 +265,15 @@ def curate(groups, history, now):
                 "published": item["lead"]["published"],
                 "url": item["lead"]["url"],
                 "short_summary": item["lead"].get("summary", ""),
+                "provenance": item["lead"].get("provenance", "publisher_rss"),
                 "related_reports": [
                     {
                         "publisher": report["publisher"],
                         "title": report["title"],
                         "short_summary": report.get("summary", ""),
                         "url": report["url"],
+                        "provenance": report.get("provenance", "publisher_rss"),
+                        "published": report.get("published"),
                     }
                     for report in item["reports"]
                     if report["publisher"] != item["lead"]["publisher"]
