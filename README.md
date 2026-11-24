@@ -207,3 +207,34 @@ GitHub Actions daily workflow run after the applicable reset. If its new
 log explicitly reports quota category=daily or quota category=minute,
 use that evidence to guide the next change. Do not try an unapproved
 voice or a paid API tier to bypass rate limits.
+
+## Phases 3.3 and 3.2: source-led six-minute writing
+
+These upgrades were implemented in sequence with separate GitHub checks.
+
+- Stage 3.3: add official UN Press RSS to NASA/BLS/CISA discovery, retrieve up
+  to three carefully bounded official-page excerpts from allowlisted agency
+  sources, label agency statements as claims rather than independent
+  confirmation, and flag numerical differences between publishers for review.
+  RSS matching is still not independent fact-checking; no licensed press
+  articles or GDELT-discovered pages are scraped.
+- Stage 3.2: divide AI scriptwriting into two non-overlapping topical calls,
+  one for world developments and one for economy/science/technology. The
+  opening, official weather and signoff are controlled by the program.
+  Script numbers must be present in cited excerpts or measured weather,
+  including source-excerpt rounding allowed by prior regression coverage.
+- Spoken duration is estimated from the actual measured Charon reading rate
+  (about 163 words/minute, based on the prior 657-word 241.9-second episode).
+  About 925 words should yield around 5:40, but source constraints outrank
+  duration goals. A short episode is allowed when verified context is sparse.
+  The post-production MP3 inspection remains the authority for actual timing.
+- A failed Gemini writing request, implausible section, invented digit-form
+  statistic, or invalid script goes to the source-attributed deterministic
+  fallback. All published audio remains **Gemini Charon exclusively**.
+- The production pipeline sends at most two script requests to the selected
+  writing model by default. This does not eliminate TTS quotas or guarantee
+  that calls are free on a billed Google project.
+
+See [Newsroom 3.0 Roadmap](NEWSROOM3_ROADMAP.md) for release milestones and
+limitations. A successful offline test run does not replace a live podcast
+production run and an editorial listen-through.
