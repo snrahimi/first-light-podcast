@@ -112,7 +112,7 @@ class Broadcast32Tests(unittest.TestCase):
         reason = broadcast32._section_rejection("Too short to be news.")
         self.assertTrue(reason.startswith("too_short_"))
         self.assertEqual(
-            broadcast32._section_rejection("See https://example.org/news " * 30),
+            broadcast32._section_rejection("See https://example.org/news " * 75),
             "raw_url_in_spoken_script"
         )
 
