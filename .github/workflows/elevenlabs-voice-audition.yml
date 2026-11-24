@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   private-voice-test:
-    name: Generate one private 45-second voice comparison
+    name: Generate one 45-second voice comparison
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -35,11 +35,11 @@ jobs:
           ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
         run: python -m src.elevenlabs_audition
 
-      - name: Store private comparison audio (no Pages or Release publishing)
+      - name: Store temporary audition audio (no Pages or Release publishing)
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: first-light-elevenlabs-private-sample
+          name: first-light-elevenlabs-review-sample
           path: voice-audition/
           if-no-files-found: error
           retention-days: 1
