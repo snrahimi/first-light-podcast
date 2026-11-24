@@ -27,13 +27,14 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus
 else:
     import editorial
     import newsroom3
     import research33
     import broadcast32
     import quality2plus
+    import monitor2plus
 import base64
 import io
 import wave
@@ -1306,6 +1307,7 @@ audio{{display:block;width:100%;margin:30px 0}}
 <p><a href="latest.mp3?date={day}">Download this episode</a> ·
 <a href="feed.xml">Subscribe with RSS</a> ·
 <a href="evidence.json">Newsroom source audit</a> ·
+<a href="health.html">Production quality dashboard</a> ·
 <a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
 <h2>Sources</h2><ol>{links}</ol>
 <h2>Transcript</h2><p>{html.escape(transcript)}</p>
@@ -1361,9 +1363,39 @@ def main():
     edition["audio_quality"] = audio_stats
     LOG.info("Pre-publish audio verified: %s, %.1f seconds, %s bps",
              narrator, audio_stats["duration_seconds"], audio_stats["bitrate_bps"])
+    record = monitor2plus.health_record(day, edition, audio_stats)
+    with notes.open("a", encoding="utf-8") as file:
+        file.write("\n\n" + monitor2plus.encode_health(record) + "\n")
     publish_release(day, mp3, transcript, notes, evidence_path)
     releases = list_releases(day)
     base = public_base()
+    history = monitor2plus.rolling_report(releases, now.date())
+    (SITE / "health.json").write_text(
+        json.dumps(history, indent=2), encoding="utf-8"
+    )
+    health_lines = [
+        ("Episodes published in 30-day calendar window", history["episodes_found"]),
+        ("Episodes carrying quality metadata", history["episodes_with_quality_metadata"]),
+        ("Narrated episodes within 5–7 minutes", history["five_to_seven_minute_episodes"]),
+        ("Fallback scripts among measured episodes", history["rss_script_fallbacks"]),
+        ("Official document pages among measured", history["official_source_pages_total"]),
+    ]
+    (SITE / "health.html").write_text(
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>First Light production health</title>'
+        '<body style="font:18px/1.6 system-ui;max-width:720px;margin:30px auto;padding:20px">'
+        '<h1>First Light production health</h1>'
+        '<p>Rolling window ending ' + html.escape(day) + '.</p><dl>'
+        + "".join(
+            '<dt>' + html.escape(label) + '</dt><dd>' + str(value) + '</dd>'
+            for label, value in health_lines
+        )
+        + '</dl><p>' + html.escape(history["metric_limitations"]) + '</p>'
+        '<p><a href="health.json">Machine-readable metrics</a> · '
+        '<a href="index.html">Listen to First Light</a></p></body></html>',
+        encoding="utf-8"
+    )
 
     xml_feed(releases, base).write(SITE / "feed.xml", encoding="utf-8", xml_declaration=True)
     cover(SITE / "cover.png")
