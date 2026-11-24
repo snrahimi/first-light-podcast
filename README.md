@@ -238,3 +238,38 @@ These upgrades were implemented in sequence with separate GitHub checks.
 See [Newsroom 3.0 Roadmap](NEWSROOM3_ROADMAP.md) for release milestones and
 limitations. A successful offline test run does not replace a live podcast
 production run and an editorial listen-through.
+
+## Follow-up: source depth and duration preflight
+
+The November 24 live acceptance run was published successfully with
+Gemini Charon and a Phase 3.2 segmented script, but the 529-word audio
+was only 3:08 long. A request for more words is not a verification method.
+
+The next implementation connects the **already selected** stories to
+additional same-category, high-overlap, directly linked RSS snippets from
+the existing trusted publisher and official-agency feed lists. The two
+world leads receive priority. Source/domain matching, small excerpt
+limits, and the exact claim-to-source ledger are enforced *before*
+using the new context for speechwriting.
+
+This is reporting *attribution*, **not** independent corroboration. No
+publisher article body is scraped, no unlicensed full-text material is
+copied, and discovery-only GDELT entries are excluded.
+
+The scriptwriter now gets a per-story plan derived from the number
+of distinct attributed excerpts and available official passages, with
+separate budgets for leads and supporting reports. It is instructed
+to add specific details or consequences *only* when excerpts support
+them, not to pad narration or invent explanatory history.
+
+A Charon duration preflight runs **before narration**. Its estimate is
+based on a measured ~163 words/minute, so it is approximate. The
+log and public latest.json include the projected duration, number of
+shortfall seconds and count of extra *supported* words needed for five
+minutes. **A short, safe episode may still publish:** failure to reach
+five minutes is reported rather than concealed by made-up news. Actual
+MP3 duration remains authoritative.
+
+The enhancements do not change Gemini API request count (still two
+text-writing calls), the required Charon voice, billing, or the
+normal GitHub Actions daily schedule.
