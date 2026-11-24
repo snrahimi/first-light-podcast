@@ -148,6 +148,109 @@ class PrimaryResearchTests(unittest.TestCase):
             "https://press.un.org/not-news/report",
             "United Nations Press Releases"))
 
+    def test_official_context_filters_unrelated_page_paragraphs(self):
+        item = nasa_dossier()
+        url = item["sources"][0]["url"]
+        page = """<html><main>
+            <h1>NASA announces an instrument test in a laboratory</h1>
+            <p>NASA engineers tested the spacecraft instrument in a research
+               laboratory and discussed the evaluation of its components.</p>
+            <p>In South Sudan, a separate local dispute disrupted cattle
+               farming communities with no connection to the NASA study.</p>
+            </main></html>"""
+        doc = research33.get_official_excerpt(
+            url, "NASA News Releases",
+            headline="NASA announces an instrument test",
+            get=lambda u, **kw: html_response(u, page),
+        )
+        self.assertIsNotNone(doc)
+        self.assertIn("NASA engineers tested", doc["source_text"])
+        self.assertNotIn("South Sudan", doc["source_text"])
+        wrong = research33.get_official_excerpt(
+            url, "NASA News Releases",
+            headline="Unrelated archaeological research in Peru",
+            get=lambda u, **kw: html_response(u, page),
+        )
+        self.assertIsNone(wrong)
+
+    def test_selected_world_lead_links_relevant_un_official_report(self):
+        from src import newsroom3
+        title = "Security Council discusses Ukraine energy infrastructure attacks"
+        story = {
+            "title": title, "short_summary": "A BBC report about the council",
+            "url": "https://www.bbc.co.uk/news/world-1000",
+            "category": "world", "publisher": "BBC World",
+            "published": "2026-11-24T07:00:00+00:00",
+            "provenance": "publisher_rss", "related_reports": [],
+        }
+        edition = {"rundown": {"Top world headlines": [story]}}
+        dossiers = newsroom3.build_dossiers(edition, [])
+        un = {
+            "title": "Security Council discusses Ukraine energy infrastructure attacks amid winter",
+            "summary": "At a meeting, the UN discussed the damage to energy infrastructure.",
+            "publisher": "United Nations Press Releases",
+            "url": "https://press.un.org/en/2026/sc-1001.doc.htm",
+            "provenance": "primary_rss", "age": 1,
+            "published": "2026-11-24T08:00:00+00:00",
+        }
+        inputs = {"world": [
+            un,
+            dict(un, url="https://press.un.org.attacker.example/en/2026/no"),
+            dict(un, title="Ukraine energy summit discusses new transportation only",
+                 url="https://press.un.org/en/2026/no"),
+        ]}
+        added = research33.link_selected_feed_context(dossiers, inputs)
+        self.assertEqual(added, 1)
+        self.assertEqual(dossiers["Top world headlines"][0][
+            "linked_feed_context_count"], 1)
+        self.assertGreaterEqual(newsroom3.validate_dossiers(dossiers)[
+            "attributed_claims"], 2)
+        def fake_get(url, **kwargs):
+            return html_response(url, """
+            <html><main><h1>Security Council discusses Ukraine attacks</h1>
+            <p>The Council heard reports of damage to energy infrastructure
+            during a meeting in November and discussed the response.</p>
+            <p>Representatives described possible future talks but did not
+            announce a final agreement after the meeting.</p></main></html>
+            """)
+        research33.enrich_dossiers(dossiers, get=fake_get)
+        self.assertEqual(research33.validate_research(dossiers)[
+            "official_documents_checked"], 1)
+        self.assertEqual(research33.validate_research(dossiers)[
+            "selected_story_related_feeds"], 1)
+        self.assertIn("issuing_agency_page", str(dossiers))
+
+    def test_selected_stories_reject_unrelated_and_untrusted_sources(self):
+        from src import newsroom3
+        title = "Security Council discusses Ukraine energy infrastructure attacks"
+        story = {
+            "category": "world", "title": title, "publisher": "BBC World",
+            "url": "https://www.bbc.co.uk/news/world-1000",
+            "short_summary": "", "published": "2026-11-24T08:00:00+00:00",
+            "related_reports": [],
+        }
+        dossiers = newsroom3.build_dossiers({
+            "rundown": {"Top world headlines": [story]}
+        }, [])
+        candidates = [
+            {
+                "title": "Russia and Ukraine host talks on a different topic",
+                "publisher": "United Nations Press Releases",
+                "url": "https://press.un.org/en/2026/unrelated",
+                "provenance": "primary_rss",
+            },
+            {
+                "title": title,
+                "publisher": "BBC World",
+                "url": "https://totally-fake.example/article",
+                "provenance": "publisher_rss",
+            },
+        ]
+        self.assertEqual(research33.link_selected_feed_context(
+            dossiers, {"world": candidates}), 0)
+        self.assertEqual(newsroom3.validate_dossiers(dossiers)[
+            "attributed_claims"], 1)
+
     def test_only_three_official_retrievals_per_edition(self):
         d = {"Science": [nasa_dossier() for _ in range(8)]}
         calls = []

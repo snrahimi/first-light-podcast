@@ -157,6 +157,27 @@ Human verification, licensed independent full-text investigations, and editorial
 
 These distinctions matter: an end-to-end production success is not the same thing as reaching the editorial duration, independent verification, or research-enrichment goals. None of those gaps should be disguised by filler.
 
+
+## Follow-up milestone: selected-story evidence and length preflight
+
+After the November 24, 2026 live run confirmed Phase 3.2 and Charon
+publication worked but yielded a 529-word, 3:08 episode:
+
+1. Enrich the selected leads with high-overlap attributed RSS headlines
+   and summaries from the *existing trusted feeds*, including primary
+   agency statements when relevant. Cap extra source links per story,
+   reject unrelated/impersonated sources, and audit every excerpt.
+2. Tell the two-part Gemini writer what distinct evidence supports each
+   story, with advisory lead/brief word budgets and hard instructions
+   against padding, speculation or fabricated consequences.
+3. Warn before narration when estimated Charon runtime is below five
+   minutes. Publish the shortfall and exact new-source counts in latest.json
+   so a short result is visible, not mistaken for a completed duration goal.
+
+This is a code milestone; a fresh live run is still required to confirm
+how much usable extra reporting is actually found and whether the
+published narration reaches the target.
+
 ## Roadmap after Newsroom 3.0
 
 | Milestone | Status | Next acceptance checkpoint |

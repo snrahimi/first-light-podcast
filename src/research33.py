@@ -14,9 +14,10 @@ from urllib.parse import urlsplit
 import requests
 
 if __package__:
-    from . import newsroom3
+    from . import newsroom3, editorial
 else:
     import newsroom3
+    import editorial
 
 LOG = logging.getLogger("firstlight.research33")
 MAX_DOCUMENTS = 3
@@ -75,8 +76,8 @@ def _issuer_matches(url, publisher):
     return path.startswith(allow[1])
 
 
-def get_official_excerpt(url, publisher, get=requests.get):
-    """One eligible public NASA/BLS web page, with no redirects or PDFs.
+def get_official_excerpt(url, publisher, get=requests.get, headline=None):
+    """One eligible public agency web page, with no redirects or PDFs.
 
     The source link is already from an agency feed and is rechecked here.
     No third-party publisher body text is read. This is a small excerpt,
@@ -112,7 +113,22 @@ def get_official_excerpt(url, publisher, get=requests.get):
             LOG.info("Agency context page had no extractable paragraphs: %s",
                      publisher)
             return None
-        # Keep excerpts of *agency* reporting rather than the whole page.
+        if headline:
+            # Agency pages occasionally combine unrelated briefs. Attach
+            # only paragraphs that visibly share the selected headline's
+            # meaningful subject tokens; never supply unrelated paragraphs
+            # as if they substantiated the selected event.
+            tokens = editorial.key_tokens(headline)
+            paragraphs = [
+                paragraph for paragraph in paragraphs
+                if len(tokens & editorial.key_tokens(paragraph)) >= 2
+            ][:8]
+            if not paragraphs:
+                LOG.info("Official document has no headline-matched excerpts: %s",
+                         publisher)
+                return None
+        # Keep short snippets of the issuing agency's own report, not the
+        # full page or unrelated stories from a shared press-release listing.
         text = " ".join(paragraphs[:8])[:MAX_CONTEXT_CHARS]
         text = text.rsplit(" ", 1)[0].strip() if len(text) == MAX_CONTEXT_CHARS else text
         if len(text) < 100:
@@ -161,6 +177,133 @@ def _reporting_comparison(dossier):
     }
 
 
+# Only previously validated source-feed hostnames may contribute enrichment.
+# This does not fetch article pages, and source similarity is not corroboration.
+PUBLISHER_FEED_HOSTS = {
+    "BBC": ("bbc.co.uk", "bbc.com"),
+    "NPR": ("npr.org",),
+    "Guardian": ("theguardian.com",),
+    "The Guardian": ("theguardian.com",),
+    "Al Jazeera": ("aljazeera.com",),
+}
+MAX_RELATED_LEADS = 2
+MAX_RELATED_OTHER = 1
+
+
+def _trusted_feed_candidate(entry):
+    publisher = str(entry.get("publisher", ""))
+    url = str(entry.get("url", ""))
+    if entry.get("provenance", "").startswith("primary_"):
+        return _issuer_matches(url, publisher)
+    for prefix, hosts in PUBLISHER_FEED_HOSTS.items():
+        if publisher.startswith(prefix):
+            return newsroom3.host_ok(url, hosts)
+    return False
+
+
+def link_selected_feed_context(dossiers, groups):
+    """Enrich SELECTED stories with short, directly linked feed statements.
+
+    Only high-overlap, same-category headlines from already curated, trusted
+    publisher/agency feeds may be attached. No third-party article scraping,
+    invented synthesis or independent verification. Prioritize the two
+    world leads. Every appended claim passes the existing exact-source gate.
+    """
+    attached = 0
+    for section, chapter in dossiers.items():
+        category = {
+            "Top world headlines": "world",
+            "Around the world": "world",
+            "Business and markets": "business",
+            "Science": "science",
+            "Technology and cybersecurity": "tech",
+        }.get(section)
+        cap = MAX_RELATED_LEADS if section == "Top world headlines" else MAX_RELATED_OTHER
+        options = groups.get(category, []) if category else []
+        for dossier in chapter:
+            dossier["linked_feed_context_count"] = 0
+            known = {src["url"] for src in dossier["sources"]}
+            existing_publishers = {src["publisher"] for src in dossier["sources"]}
+            matching = []
+            for candidate in options:
+                title = str(candidate.get("title", ""))
+                url = str(candidate.get("url", ""))
+                if not title or not url or url in known:
+                    continue
+                if not _trusted_feed_candidate(candidate):
+                    continue
+                a = editorial.key_tokens(dossier["headline"])
+                b = editorial.key_tokens(title)
+                common = len(a & b)
+                score = editorial.story_similarity(dossier["headline"], title)
+                # Strong literal topic overlap; e.g. two reports on Ukraine
+                # alone must not be treated as reports on the same event.
+                if common < 4 or score < 0.70:
+                    continue
+                matching.append((score, candidate))
+            matching.sort(
+                key=lambda hit: (
+                    hit[1]["publisher"] in existing_publishers,
+                    -hit[0],
+                    hit[1].get("age", 999),
+                )
+            )
+            for _, source in matching:
+                if dossier["linked_feed_context_count"] >= cap:
+                    break
+                url = source["url"]
+                if url in known:
+                    continue
+                publisher = source["publisher"]
+                is_primary = source.get("provenance", "").startswith("primary_")
+                item = {
+                    "publisher": publisher,
+                    "url": url,
+                    "title": source["title"],
+                    "summary": source.get("summary", ""),
+                    "published": source.get("published"),
+                    "primary": is_primary,
+                }
+                # Attributed feed excerpts only, never long article content.
+                claims = []
+                for field in ("title", "summary"):
+                    excerpt = newsroom3.clean(item[field], 195)
+                    if len(excerpt) < 12 or any(
+                        claim["evidence"] == excerpt for claim in claims
+                    ):
+                        continue
+                    claims.append({
+                        "id": f"extra_{len(dossier['sources']) + 1}_{field}",
+                        "claim": excerpt,
+                        "evidence": excerpt,
+                        "evidence_field": field,
+                        "source_url": url,
+                        "publisher": publisher,
+                        "published": item["published"],
+                        "evidence_status": (
+                            "primary_statement" if is_primary
+                            else "attributed_publisher_report"
+                        ),
+                        "independently_verified": False,
+                    })
+                if not claims:
+                    continue
+                dossier["sources"].append(item)
+                dossier["claim_ledger"].extend(claims)
+                known.add(url)
+                existing_publishers.add(publisher)
+                dossier["linked_feed_context_count"] += 1
+                attached += 1
+            if dossier["linked_feed_context_count"]:
+                dossier["uncertainties"].append(
+                    "These related publisher feed excerpts provide additional "
+                    "attributed reporting, not independent corroboration."
+                )
+    LOG.info("Phase 3.3 selected-story context linked %d RSS/agency reports",
+             attached)
+    return attached
+
+
 def enrich_dossiers(dossiers, get=requests.get):
     """Attach limited official-page contexts, comparators and explicit limits.
 
@@ -182,7 +325,8 @@ def enrich_dossiers(dossiers, get=requests.get):
                 fetched += 1
                 dossier["official_page_fetches_attempted"] += 1
                 context = get_official_excerpt(
-                    source["url"], source["publisher"], get=get
+                    source["url"], source["publisher"], get=get,
+                    headline=source["title"],
                 )
                 if context:
                     dossier["official_context"].append(context)
@@ -220,9 +364,14 @@ def validate_research(dossiers):
                 ):
                     raise ValueError("Official context excerpt lacks exact supporting text")
                 validated += 1
+    related = sum(
+        card.get("linked_feed_context_count", 0)
+        for chapter in dossiers.values() for card in chapter
+    )
     return {
         "official_documents_checked": validated,
         "official_document_fetches_attempted": attempts,
+        "selected_story_related_feeds": related,
         "independent_fact_checks": 0,
         "comparison": "publisher-excerpt comparison only; numbers require review",
     }
@@ -255,6 +404,8 @@ def research_notes(dossiers, stats):
     lines = [
         "PHASE 3.3 OFFICIAL-DOCUMENT CONTEXT",
         f"Linked official pages inspected: {stats['official_documents_checked']}",
+        f"Relevant source-feed reports added to chosen stories: "
+        f"{stats['selected_story_related_feeds']}",
         "No independently verified factual claims are implied.",
     ]
     for category, chapter in dossiers.items():

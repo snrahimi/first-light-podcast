@@ -667,6 +667,9 @@ def news_and_script(_client, now, weather):
     )
     edition = editorial.curate(groups, recent, now)
     dossiers = newsroom3.build_dossiers(edition, leads)
+    # Enrich already selected stories with high-overlap, traceable feed
+    # reports. Run the exact-source ledger check AFTER any added excerpts.
+    research33.link_selected_feed_context(dossiers, groups)
     evidence_metrics = newsroom3.validate_dossiers(dossiers)
     research33.enrich_dossiers(dossiers)
     research_metrics = research33.validate_research(dossiers)
@@ -706,7 +709,17 @@ def news_and_script(_client, now, weather):
         newsroom3.script_numeric_gate(script, dossiers, weather, now)
     quality["estimated_duration_seconds"] = broadcast32.estimate_duration(len(script.split()))
     quality["expected_target_seconds"] = [300, 420]
+    quality["duration_preflight"] = broadcast32.duration_preflight(len(script.split()))
     quality["draft"] = draft_stats
+    if not quality["duration_preflight"]["estimated_in_target"]:
+        LOG.warning(
+            "Pre-narration duration estimate %ds is short of 5 minutes by %ds "
+            "(%d more evidence-supported words needed); do not pad with "
+            "unsupported claims",
+            quality["duration_preflight"]["estimated_seconds"],
+            quality["duration_preflight"]["shortfall_seconds"],
+            quality["duration_preflight"]["shortfall_words"],
+        )
     edition["script_mode"] = mode
     edition["script_quality"] = quality
     edition["newsroom3_audit"] = newsroom3.audit_export(
@@ -1329,11 +1342,14 @@ def main():
                 "evidence_claims": edition["newsroom3_audit"]["attributed_claims"],
                 "independently_verified_claims": 0,
                 "official_documents_reviewed": edition["newsroom3_audit"]["phase33_research"]["official_documents_checked"],
+                "official_document_fetches_attempted": edition["newsroom3_audit"]["phase33_research"]["official_document_fetches_attempted"],
+                "related_feed_reports_added": edition["newsroom3_audit"]["phase33_research"]["selected_story_related_feeds"],
                 "script_words": edition["script_quality"]["script_words"],
                 "estimated_spoken_seconds": edition["script_quality"]["estimated_duration_seconds"],
-                "script_target_duration_estimated": (
-                    300 <= edition["script_quality"]["estimated_duration_seconds"] <= 420
-                ),
+                "script_target_duration_estimated": edition["script_quality"]["duration_preflight"]["estimated_in_target"],
+                "preflight_duration_status": edition["script_quality"]["duration_preflight"]["status"],
+                "preflight_shortfall_seconds": edition["script_quality"]["duration_preflight"]["shortfall_seconds"],
+                "preflight_shortfall_words": edition["script_quality"]["duration_preflight"]["shortfall_words"],
                 "evidence_audit_url": base + "/evidence.json",
                 "discovery_links_used_as_facts": False,
             },
