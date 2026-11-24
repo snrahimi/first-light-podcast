@@ -395,6 +395,11 @@ def script_numeric_gate(script, dossiers, weather, now):
         for claim in dossier["claim_ledger"]
     )
     expected = set(NUMBER.findall(evidence))
+    for chapter in dossiers.values():
+        for dossier in chapter:
+            for document in dossier.get("official_context", []):
+                for excerpt in document.get("excerpts", []):
+                    expected.update(NUMBER.findall(excerpt))
     expected.update(_weather_numeric_tokens(weather))
     expected.update({str(now.year), str(now.day), "3.0", "5", "6", "7"})
     unexpected = sorted(set(NUMBER.findall(script)) - expected)
