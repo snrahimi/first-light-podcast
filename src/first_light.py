@@ -340,32 +340,48 @@ News:
 San Antonio live weather:
 {json.dumps(weather,ensure_ascii=False)}
 """
-    model=os.getenv("GEMINI_MODEL","gemini-2.5-flash-lite")
+    model=os.getenv("GEMINI_MODEL","gemini-3.5-flash-lite")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+",model):
-        LOG.warning("Invalid Gemini model name, using fallback")
+        LOG.warning("Invalid Gemini model name; using headline-only fallback")
         return None
-    try:
-        response=requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            headers={"x-goog-api-key":key,"Content-Type":"application/json"},
-            json={"contents":[{"parts":[{"text":prompt}]}],
-                  "generationConfig":{"temperature":0.2,"maxOutputTokens":3600}},
-            timeout=100
-        )
-        if response.status_code in (401,403,404,429):
-            LOG.warning("Gemini free tier unavailable, status %s; using fallback",response.status_code)
+    # Newer Gemini Flash-Lite models provide Free tier access where eligible.
+    # If the selected model is unavailable to this project, try one other
+    # publicly documented free-tier model. Never call a paid AI API.
+    candidates=[model]
+    if model != "gemini-3.1-flash-lite":
+        candidates.append("gemini-3.1-flash-lite")
+    for selected_model in candidates:
+        try:
+            response=requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{selected_model}:generateContent",
+                headers={"x-goog-api-key":key,"Content-Type":"application/json"},
+                json={"contents":[{"parts":[{"text":prompt}]}],
+                      "generationConfig":{"temperature":0.2,"maxOutputTokens":3600}},
+                timeout=100
+            )
+            if response.status_code==404:
+                LOG.warning("Gemini model %s is unavailable (HTTP 404), trying another free-tier model",
+                            selected_model)
+                continue
+            if response.status_code in (401,403,429):
+                LOG.warning("Gemini rejected request with HTTP %d, using sourced RSS fallback",
+                            response.status_code)
+                return None
+            response.raise_for_status()
+            data=response.json()
+            script=" ".join(p.get("text","") for p in data["candidates"][0]["content"]["parts"])
+            script=re.sub(r"\s+"," ",script.strip())
+            if not 650 <= len(script.split()) <= 990 or "San Antonio" not in script or "First Light" not in script:
+                LOG.warning("Gemini %s returned an unsuitable script, falling back to RSS",selected_model)
+                return None
+            LOG.info("Gemini script produced with model %s (%s words)",selected_model,len(script.split()))
+            return script
+        except (requests.RequestException,ValueError,KeyError,IndexError) as exc:
+            LOG.warning("Gemini model %s failed; RSS fallback: %s",
+                        selected_model,str(exc)[:140])
             return None
-        response.raise_for_status()
-        data=response.json()
-        script=" ".join(p.get("text","") for p in data["candidates"][0]["content"]["parts"])
-        script=re.sub(r"\s+"," ",script.strip())
-        if not 650 <= len(script.split()) <= 990 or "San Antonio" not in script or "First Light" not in script:
-            LOG.warning("Gemini output failed length/content checks; using fallback")
-            return None
-        return script
-    except (requests.RequestException,ValueError,KeyError,IndexError) as exc:
-        LOG.warning("Gemini unavailable, using fallback: %s",str(exc)[:140])
-        return None
+    LOG.warning("No accessible Gemini model for this project; using sourced RSS fallback")
+    return None
 
 def news_and_script(_client,now,weather):
     groups=rss_news(now)
