@@ -43,17 +43,10 @@ jobs:
       - name: Run offline tests
         run: python -m unittest discover -s tests -v
 
-      - name: Cache local speech models
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/first-light
-          key: first-light-voice-models-v2-charon-fp16
-
       - name: Generate and publish free podcast
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
-          KOKORO_VOICE: ${{ vars.KOKORO_VOICE || 'am_adam' }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           FEED_BASE_URL: ${{ vars.FEED_BASE_URL }}
