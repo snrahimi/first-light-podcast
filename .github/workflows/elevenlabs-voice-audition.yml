@@ -1,0 +1,45 @@
+name: ElevenLabs Voice Audition (Manual Only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-voice-test:
+    name: Generate one private 45-second voice comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal audition dependencies
+        run: |
+          python -m pip install requests
+          command -v ffprobe
+
+      - name: Validate audition offline
+        run: python -m unittest discover -s tests -p test_elevenlabs_audition.py -v
+
+      - name: Synthesize bounded ElevenLabs sample
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+        run: python -m src.elevenlabs_audition
+
+      - name: Store private comparison audio (no Pages or Release publishing)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-light-elevenlabs-private-sample
+          path: voice-audition/
+          if-no-files-found: error
+          retention-days: 1
