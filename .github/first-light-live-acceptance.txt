@@ -1,3 +1,0 @@
-One-time production acceptance trigger for First Light Phases 3.3 + 3.2.
-GitHub run should use main with Gemini Charon only, and publish a real episode.
-After verifying its run, remove this marker and the temporary workflow push trigger.
