@@ -286,6 +286,11 @@ STRICT SOURCE BOUNDARIES:
 - Explain why something matters only when a source excerpt supports it.
 - Never repeat text to meet the word target or disclose invented reporting.
 - No source URLs spoken aloud and no unsupported sweeping statements.
+- For elections, wars, casualties, sanctions, public-health emergencies
+  and breaking incidents, state who reported the claim and when. Never turn
+  an early estimate, allegation or government statement into an established
+  fact. Flag uncertainty where sourcing is thin.
+- Treat background from past episodes as historical context, not a new event.
 - News is from {now.strftime('%B %d, %Y')} for a San Antonio, Texas listener.
 
 STORY PLAN (word budgets are advisory and NEVER justify unsupported claims):
