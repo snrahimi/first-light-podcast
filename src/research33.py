@@ -90,6 +90,8 @@ def get_official_excerpt(url, publisher, get=requests.get):
             headers=newsroom3.USER_AGENT,
         )
         if result.status_code != 200:
+            LOG.info("Agency context fetch returned HTTP %s for %s",
+                     result.status_code, publisher)
             return None
         if not newsroom3.host_ok(getattr(result, "url", url),
                                  (AGENCY_URLS[publisher][0],)):
@@ -107,6 +109,8 @@ def get_official_excerpt(url, publisher, get=requests.get):
             if item not in paragraphs:
                 paragraphs.append(item)
         if not paragraphs:
+            LOG.info("Agency context page had no extractable paragraphs: %s",
+                     publisher)
             return None
         # Keep excerpts of *agency* reporting rather than the whole page.
         text = " ".join(paragraphs[:8])[:MAX_CONTEXT_CHARS]
@@ -167,6 +171,7 @@ def enrich_dossiers(dossiers, get=requests.get):
         for dossier in chapter:
             dossier["reporting_comparison"] = _reporting_comparison(dossier)
             dossier["official_context"] = []
+            dossier["official_page_fetches_attempted"] = 0
             for source in dossier["sources"]:
                 if fetched >= MAX_DOCUMENTS:
                     break
@@ -175,6 +180,7 @@ def enrich_dossiers(dossiers, get=requests.get):
                 if not _issuer_matches(source["url"], source["publisher"]):
                     continue
                 fetched += 1
+                dossier["official_page_fetches_attempted"] += 1
                 context = get_official_excerpt(
                     source["url"], source["publisher"], get=get
                 )
@@ -190,6 +196,10 @@ def enrich_dossiers(dossiers, get=requests.get):
 def validate_research(dossiers):
     """Check document provenance and exact extraction without pretending truth."""
     validated = 0
+    attempts = sum(
+        card.get("official_page_fetches_attempted", 0)
+        for chapter in dossiers.values() for card in chapter
+    )
     for chapter in dossiers.values():
         for dossier in chapter:
             comparison = dossier.get("reporting_comparison", {})
@@ -212,6 +222,7 @@ def validate_research(dossiers):
                 validated += 1
     return {
         "official_documents_checked": validated,
+        "official_document_fetches_attempted": attempts,
         "independent_fact_checks": 0,
         "comparison": "publisher-excerpt comparison only; numbers require review",
     }
