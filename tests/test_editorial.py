@@ -112,7 +112,7 @@ class EditorialTests(unittest.TestCase):
         edition = editorial.curate(standard_groups(), [], self.now)
         valid = ("Good morning, this is First Light in San Antonio, 2026. "
                  "Here are today's international world stories. " +
-                 "Verified facts should be attributed to sources. " * 70)
+                 "Verified facts should be attributed to sources. " * 100)
         result = editorial.script_quality(valid, edition, self.now)
         self.assertGreater(result["script_words"], 640)
         with self.assertRaises(ValueError):
