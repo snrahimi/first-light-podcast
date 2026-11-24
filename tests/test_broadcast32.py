@@ -105,6 +105,17 @@ class Broadcast32Tests(unittest.TestCase):
         self.assertLess(info["estimated_seconds"], 300)
         self.assertLess(info["provider_calls"], 3)
 
+    def test_shorter_but_substantive_sections_are_not_automatically_discarded(self):
+        section = "BBC reports updates to the international diplomatic talks. " * 15
+        self.assertIsNone(broadcast32._section_rejection(section))
+        self.assertTrue(broadcast32._check_section(section))
+        reason = broadcast32._section_rejection("Too short to be news.")
+        self.assertTrue(reason.startswith("too_short_"))
+        self.assertEqual(
+            broadcast32._section_rejection("See https://example.org/news " * 30),
+            "raw_url_in_spoken_script"
+        )
+
     def test_invalid_model_does_not_call_provider(self):
         edition, dossiers = edition_and_dossiers()
         with patch("src.broadcast32.requests.post") as post:
