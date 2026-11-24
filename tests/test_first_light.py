@@ -10,6 +10,8 @@ import io
 import tempfile
 import wave
 import json
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -220,6 +222,28 @@ class PodcastTests(unittest.TestCase):
                    return_value=SimpleNamespace(stdout=json.dumps(valid))):
             with self.assertRaises(RuntimeError):
                 inspect_audio(Path("/tmp/test.mp3"))
+
+
+    def test_entrypoints_load_editorial_before_configuration_checks(self):
+        """Both GitHub module launch and direct script launch must import."""
+        root = Path(__file__).resolve().parents[1]
+        source = root / "src" / "first_light.py"
+        environment = dict(os.environ)
+        environment.pop("GH_TOKEN", None)
+        for invocation in (
+            [sys.executable, "-m", "src.first_light"],
+            [sys.executable, str(source)],
+        ):
+            with self.subTest(invocation=invocation):
+                result = subprocess.run(
+                    invocation, cwd=root, env=environment,
+                    capture_output=True, text=True, timeout=15,
+                )
+                # Startup must reach the deliberate missing-token guard, rather
+                # than failing at imports; it must not make live API requests.
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn("Missing environment variable: GH_TOKEN", result.stderr)
+                self.assertNotIn("ModuleNotFoundError", result.stderr)
 
 
 if __name__ == "__main__":
