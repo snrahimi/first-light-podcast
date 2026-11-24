@@ -148,6 +148,31 @@ class PrimaryResearchTests(unittest.TestCase):
             "https://press.un.org/not-news/report",
             "United Nations Press Releases"))
 
+    def test_official_context_filters_unrelated_page_paragraphs(self):
+        item = nasa_dossier()
+        url = item["sources"][0]["url"]
+        page = """<html><main>
+            <h1>NASA announces an instrument test in a laboratory</h1>
+            <p>NASA engineers tested the spacecraft instrument in a research
+               laboratory and discussed the evaluation of its components.</p>
+            <p>In South Sudan, a separate local dispute disrupted cattle
+               farming communities with no connection to the NASA study.</p>
+            </main></html>"""
+        doc = research33.get_official_excerpt(
+            url, "NASA News Releases",
+            headline="NASA announces an instrument test",
+            get=lambda u, **kw: html_response(u, page),
+        )
+        self.assertIsNotNone(doc)
+        self.assertIn("NASA engineers tested", doc["source_text"])
+        self.assertNotIn("South Sudan", doc["source_text"])
+        wrong = research33.get_official_excerpt(
+            url, "NASA News Releases",
+            headline="Unrelated archaeological research in Peru",
+            get=lambda u, **kw: html_response(u, page),
+        )
+        self.assertIsNone(wrong)
+
     def test_selected_world_lead_links_relevant_un_official_report(self):
         from src import newsroom3
         title = "Security Council discusses Ukraine energy infrastructure attacks"
