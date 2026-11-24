@@ -1247,11 +1247,12 @@ def archive_prior_release_assets(tag, prior_body):
     folder = WORK / "previous_revisions"
     folder.mkdir(parents=True, exist_ok=True)
     for original in originals:
+        path = folder / original
+        path.unlink(missing_ok=True)
         downloaded = run_gh(
             "release", "download", tag, "--pattern", original,
             "--dir", str(folder), check=False,
         )
-        path = folder / original
         if downloaded.returncode != 0 or not path.exists() or not path.stat().st_size:
             raise RuntimeError("Could not archive existing published episode")
         suffix = original[len(tag):]
