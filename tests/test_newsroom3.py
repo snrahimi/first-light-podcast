@@ -184,5 +184,21 @@ class Newsroom3Tests(unittest.TestCase):
         self.assertIn("gemini-3.5-flash-lite", post.call_args_list[0].args[0])
 
 
+    def test_official_agency_link_must_match_issuing_agency(self):
+        edition = editorial.curate(editorial_groups(), [], NOW)
+        dossiers = newsroom3.build_dossiers(edition, [])
+        first = next(x for chapter in dossiers.values() for x in chapter)
+        source = first["sources"][0]
+        source["primary"] = True
+        source["publisher"] = "NASA News Releases"
+        source["url"] = "https://not-nasa.example.org/report"
+        claim = first["claim_ledger"][0]
+        claim["publisher"] = source["publisher"]
+        claim["source_url"] = source["url"]
+        claim["evidence_status"] = "primary_statement"
+        with self.assertRaisesRegex(ValueError, "issuing agency"):
+            newsroom3.validate_dossiers(dossiers)
+
+
 if __name__ == "__main__":
     unittest.main()
