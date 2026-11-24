@@ -1,0 +1,54 @@
+name: First Light Delivery Watchdog (Free)
+
+on:
+  schedule:
+    - cron: '15 6 * * *'
+      timezone: America/Chicago
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: first-light-delivery-watchdog
+  cancel-in-progress: false
+
+jobs:
+  verify-episode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install monitoring dependency
+        run: pip install 'requests>=2.31,<3'
+
+      - name: Check today's episode and 30-day metrics
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python -m src.monitor2plus
+
+      - name: Create a single daily delivery alert issue if missing
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          day=$(TZ=America/Chicago date +%F)
+          title="First Light delivery alert: ${day}"
+          previous="$(gh issue list --state all --limit 200 --json title --jq '.[].title')"
+          if printf '%s\n' "${previous}" | grep -Fxq "${title}"; then
+            echo "A matching delivery alert issue already exists."
+            exit 0
+          fi
+          gh issue create \
+            --title "${title}" \
+            --body "Automated delivery verification could not confirm today's complete GitHub Release and episode assets. This might be a missing episode, an incomplete release, or a temporary GitHub API outage. Inspect the [watchdog run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) before making corrections. Do not assume missing audio or factual errors without review."
