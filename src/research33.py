@@ -13,7 +13,10 @@ from urllib.parse import urlsplit
 
 import requests
 
-from . import newsroom3
+if __package__:
+    from . import newsroom3
+else:
+    import newsroom3
 
 LOG = logging.getLogger("firstlight.research33")
 MAX_DOCUMENTS = 3
