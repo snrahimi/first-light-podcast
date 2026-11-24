@@ -949,7 +949,7 @@ def xml_feed(releases, base):
     txt(ch, "link", base + "/")
     txt(ch, "language", "en-us")
     txt(ch, "description",
-        "Daily AI-narrated news from around the world, markets, science, tech and San Antonio weather.")
+        "AI-assisted source-attributed daily news from around the world, business, science, technology and San Antonio weather.")
     txt(ch, "{http://www.itunes.com/dtds/podcast-1.0.dtd}author", "First Light")
     txt(ch, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit", "false")
     txt(ch, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", "News")
@@ -967,7 +967,7 @@ def xml_feed(releases, base):
         txt(item, "title", f"{TITLE} | {day}")
         txt(item, "link", release.get("html_url", base))
         ET.SubElement(item, "guid", {"isPermaLink": "false"}).text = release["tag_name"]
-        txt(item, "description", "Today's global headlines, markets, science, technology and San Antonio weather. "
+        txt(item, "description", "AI-assisted sourced world news, business, science, technology and San Antonio weather. "
             + "Full source links and transcript: " + base + "/")
         txt(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit", "false")
         date_value = release.get("published_at") or release.get("created_at")
@@ -1024,10 +1024,11 @@ audio{{display:block;width:100%;margin:30px 0}}
 <h2>{html.escape(day)}</h2>
 <audio controls preload="metadata" src="latest.mp3?date={day}"></audio>
 <p><a href="latest.mp3?date={day}">Download this episode</a> ·
-<a href="feed.xml">Subscribe with RSS</a></p>
+<a href="feed.xml">Subscribe with RSS</a> ·
+<a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
 <h2>Sources</h2><ol>{links}</ol>
 <h2>Transcript</h2><p>{html.escape(transcript)}</p>
-<footer>AI narration may contain errors. Follow linked original reporting.
+<footer>AI-assisted briefing. Related publisher headlines are not independent fact verification. Follow linked original reporting.
 Keep a separate wake-up alarm: publication and iPhone automation are best effort.</footer>
 </body></html>"""
 
@@ -1041,7 +1042,7 @@ def main():
     SITE.mkdir(parents=True, exist_ok=True)
 
     weather = fetch_weather(now)
-    research, sources, script = news_and_script(None, now, weather)
+    research, sources, script, edition = news_and_script(None, now, weather)
     sources += [
         {"title": "Open-Meteo San Antonio weather", "url": "https://open-meteo.com/en/docs"},
         {"title": "National Weather Service alerts", "url": "https://api.weather.gov/alerts/active"}
@@ -1051,13 +1052,25 @@ def main():
     transcript.write_text(script, encoding="utf-8")
     notes = WORK / f"first-light-{day}-sources.md"
     notes.write_text(
-        f"First Light: World Report | {day}\n\nAI-generated news and weather briefing.\n\n"
-        + "\n".join(f"- {s['title']}: {s['url']}" for s in sources)
-        + "\n\nVerify consequential claims against linked original reporting.",
-        encoding="utf-8"
+        f"First Light: World Report | {day}\n\n"
+        "AI-assisted, source-attributed briefing. Headline resemblance is NOT "
+        "proof of fact verification. No original interviews were conducted.\n\n"
+        + research
+        + "\n\nWeather reference feeds:\n"
+        + "\n".join(f"- {s['title']}: {s['url']}" for s in sources[-2:])
+        + "\n\nTo request a correction, open an issue at "
+          "https://github.com/snrahimi/first-light-podcast/issues/new/choose. "
+          "Verify consequential claims with the original linked reporting.\n\n"
+        + editorial.memory_note(edition),
+        encoding="utf-8",
     )
     mp3 = WORK / f"first-light-{day}.mp3"
-    synthesize(script, mp3)
+    narrator = synthesize(script, mp3)
+    audio_stats = inspect_audio(mp3)
+    edition["narrator"] = narrator
+    edition["audio_quality"] = audio_stats
+    LOG.info("Pre-publish audio verified: %s, %.1f seconds, %s bps",
+             narrator, audio_stats["duration_seconds"], audio_stats["bitrate_bps"])
     publish_release(day, mp3, transcript, notes)
     releases = list_releases(day)
     base = public_base()
@@ -1066,8 +1079,23 @@ def main():
     cover(SITE / "cover.png")
     shutil.copyfile(mp3, SITE / "latest.mp3")
     (SITE / "latest.json").write_text(
-        json.dumps({"date": day, "title": TITLE, "audio_url": base + "/latest.mp3?date=" + day,
-                    "published_at": datetime.now(timezone.utc).isoformat()}, indent=2),
+        json.dumps({
+            "date": day,
+            "title": TITLE,
+            "audio_url": base + "/latest.mp3?date=" + day,
+            "published_at": datetime.now(timezone.utc).isoformat(),
+            "narrator": narrator,
+            "ai_assisted": True,
+            "script_mode": edition["script_mode"],
+            "episode_duration_seconds": audio_stats["duration_seconds"],
+            "editorial": {
+                "selected_stories": edition["count"],
+                "related_source_topics": edition["related_source_count"],
+                "prior_topics_consulted": edition["history_items_consulted"],
+                "repeats_avoided": edition["repeated_topics_avoided"],
+            },
+            "audio_quality": audio_stats,
+        }, indent=2),
         encoding="utf-8"
     )
     (SITE / "index.html").write_text(web_page(day, sources, script), encoding="utf-8")
