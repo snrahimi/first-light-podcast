@@ -365,16 +365,16 @@ The optional workflow [ElevenLabs Voice Audition (Manual Only)](
 original ~45-second spoken demo (at most 820 characters) with your
 existing ElevenLabs voice, **without** changing the live podcast.
 
-Setup: Both \`ELEVENLABS_VOICE_ID\` and \`ELEVENLABS_API_KEY\` must be set
+Setup: Both `ELEVENLABS_VOICE_ID` and `ELEVENLABS_API_KEY` must be set
 as **GitHub Actions repository secrets**. The source code never reads or
 prints their values. Do not move them into repository variables or source
 files. In GitHub Actions, open **ElevenLabs Voice Audition (Manual Only)**,
 select **main**, and click **Run workflow**. From the completed workflow,
-download the artifact \`first-light-elevenlabs-private-sample\`, containing
+download the artifact `first-light-elevenlabs-private-sample`, containing
 an MP3, example script and credit-safe metadata. The artifact expires
 after **one day**. The daily workflow is unchanged.
 
-The test uses \`eleven_flash_v2_5\` and MP3 44.1kHz/128kbps, which is
+The test uses `eleven_flash_v2_5` and MP3 44.1kHz/128kbps, which is
 normally available on the free tier when the selected voice is eligible.
 Voice permissions, available credits and model access are decided by
 ElevenLabs and may produce HTTP 402/403/429. This test does **not**
