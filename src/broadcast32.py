@@ -105,6 +105,18 @@ MAX_CACHE_BYTES = 14_000
 CACHE_MAX_AGE_SECONDS = 12 * 3600
 
 
+def _retry_delay(response, attempt):
+    """Bound provider cooldown suggestions without waiting indefinitely."""
+    headers = getattr(response, "headers", {}) or {}
+    try:
+        hint = float(headers.get("Retry-After", 0))
+    except (ValueError, TypeError, OverflowError):
+        hint = 0
+    if not 0 <= hint <= 10:
+        hint = 0
+    return min(10, max(2 * (attempt + 1), hint))
+
+
 def _call_gemini(key, model, prompt, post=requests.post,
                  sleep=time.sleep, request_counter=None):
     """Retry only temporary server faults. Never retry quota 429s or 4xx.
@@ -133,7 +145,7 @@ def _call_gemini(key, model, prompt, post=requests.post,
                 return None
             LOG.warning("Temporary Gemini writer transport issue (%s), retry %d",
                         type(exc).__name__, attempt + 1)
-            sleep(min(3, 0.6 * 2**attempt))
+            sleep(min(10, 2 * (attempt + 1)))
             continue
         if response.status_code == 429:
             LOG.warning("Gemini writer HTTP 429: quota/rate limit; no automatic retry")
@@ -141,9 +153,10 @@ def _call_gemini(key, model, prompt, post=requests.post,
         if response.status_code in TRANSIENT_WRITER_STATUSES:
             if attempt + 1 < MAX_WRITER_REQUESTS_PER_SECTION:
                 # Avoid unbounded server-provided delays and thundering herds.
-                LOG.warning("Gemini writer HTTP %d; retry %d",
-                            response.status_code, attempt + 1)
-                sleep(min(3, 0.6 * 2**attempt))
+                delay = _retry_delay(response, attempt)
+                LOG.warning("Gemini writer HTTP %d; retry %d in %.1fs",
+                            response.status_code, attempt + 1, delay)
+                sleep(delay)
                 continue
         if response.status_code != 200:
             LOG.warning("Gemini writer HTTP %s; using safe fallback",
