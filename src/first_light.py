@@ -1199,7 +1199,7 @@ def release_revision_notes(previous_body, *, now=None):
     )
     revision = min(9999, int(marker.group(1)) + 1) if marker else 2
     lines = re.findall(
-        r"(?m)^- Revision \d{1,4}: [^\n]{1,170}$",
+        r"(?m)^- Revision \d{1,4}: [^\n]{1,450}$",
         previous_body or "",
     )[-25:]
     if not lines:
