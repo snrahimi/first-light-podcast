@@ -318,7 +318,8 @@ def _check_section(script, minimum=100):
 
 
 def generated_script(now, edition, dossiers, weather_text, key, model,
-                     post=requests.post, cache_dir=None, sleep=time.sleep):
+                     post=requests.post, cache_dir=None, sleep=time.sleep,
+                     early_alert_text=""):
     """Returns (script, metadata) or (None, explanation), two logical sections.
 
     Weather is appended from verified structured forecast fields, not a
@@ -418,7 +419,8 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         "and have a thoughtful day."
     )
     script = _condense(" ".join((
-        opening, a, "Now let's turn to business, science and technology.",
+        opening, early_alert_text, a,
+        "Now let's turn to business, science and technology.",
         b, weather_text, closing,
     )))
     words = len(script.split())
