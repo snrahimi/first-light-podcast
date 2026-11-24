@@ -841,6 +841,7 @@ def synthesize(script,destination):
     wav = WORK / "narration.wav"
     try:
         _tts_gemini(script, wav)
+        narrator = "Gemini Charon"
         LOG.info("Using chosen Gemini Charon narrator")
     except Exception as err:
         # Do not reveal API secrets in exception strings.
@@ -848,11 +849,13 @@ def synthesize(script,destination):
                     type(err).__name__)
         try:
             _tts_kokoro(script, wav)
+            narrator = "Kokoro FP16 (Adam)"
             LOG.info("Using free Kokoro FP16 backup voice")
         except Exception as local_err:
             LOG.warning("Kokoro unavailable (%s), switching to Piper",
                         type(local_err).__name__)
             _tts_piper(script, wav)
+            narrator = "Piper local backup"
             LOG.info("Using free Piper backup voice")
     subprocess.run([
         "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
@@ -862,6 +865,42 @@ def synthesize(script,destination):
     ], check=True, timeout=240)
     if destination.stat().st_size < 65_000:
         raise RuntimeError("Generated MP3 was unexpectedly small")
+    return narrator
+
+
+def inspect_audio(mp3):
+    """Reject missing, corrupt or implausibly short podcast audio pre-release."""
+    completed = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries",
+         "format=duration,bit_rate:stream=codec_name,sample_rate,channels",
+         "-of", "json", str(mp3)],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    data = json.loads(completed.stdout)
+    audio = next((item for item in data.get("streams", [])
+                  if item.get("codec_name") == "mp3"), None)
+    if audio is None:
+        raise RuntimeError("Podcast lacks an MP3 audio stream")
+    duration = float(data["format"]["duration"])
+    if not 160 <= duration <= 600:
+        raise RuntimeError(f"Podcast duration is implausible: {duration:.0f}s")
+    bits = int(data["format"].get("bit_rate") or 0)
+    if bits < 95000:
+        raise RuntimeError("MP3 audio bitrate unexpectedly low")
+    if duration < 290 or duration > 440:
+        LOG.warning(
+            "Episode duration %.1fs is outside the 5-7 minute target; "
+            "inspect script length and narrator pacing",
+            duration,
+        )
+    return {
+        "duration_seconds": round(duration, 1),
+        "bitrate_bps": bits,
+        "sample_rate_hz": int(audio["sample_rate"]),
+        "channels": int(audio["channels"]),
+        "target_duration_seconds": [300, 420],
+        "duration_in_target": 300 <= duration <= 420,
+    }
 
 
 def run_gh(*args, check=True):
