@@ -24,6 +24,7 @@ MAX_HTML_BYTES = 850_000
 MAX_CONTEXT_CHARS = 1400
 AGENCY_URLS = {
     "NASA News Releases": ("nasa.gov", "/news-release/"),
+    "United Nations Press Releases": ("press.un.org", "/en/"),
     "U.S. Bureau of Labor Statistics": ("bls.gov", "/news.release/"),
 }
 
