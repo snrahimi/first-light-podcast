@@ -1,60 +1,123 @@
-# First Light: World Report 🎙️ Free Edition
+# First Light: World Report 🎙️ | Version 2
 
-Automated 5–7-minute morning world news, business, science, technology and San Antonio weather podcast. Scheduled for 3:30 AM America/Chicago to prepare ahead of 5 AM.
+**The world. Before your day.** A 5–7-minute, ad-free, AI-assisted morning
+news briefing with important global events, concise business/science/technology
+updates, and San Antonio weather. Published ahead of 5 AM Central when
+scheduled services are available.
 
-**The daily workflow uses no OpenAI or ElevenLabs APIs.** It uses public news RSS feeds, optional Gemini for the script, **Gemini 3.8 Flash TTS with the Charon voice as the preferred narrator**, and free local Kokoro FP16 (Adam) / Piper when Gemini narration is unavailable. Gemini use is subject to your project's billing configuration and applicable free limits.
+## Editorial improvement: Phases 1 and 2
 
-## Add your optional Gemini Free tier key
+### Phase 1: Story judgment and sound quality
 
-1. Open Google AI Studio: https://aistudio.google.com/apikey
-2. Select or create a project with Gemini API Free tier access. Check the project's billing status. Do not enable paid billing if your goal is zero cost.
-3. Create an API key and copy it.
-4. Open this repository's GitHub Actions Secrets: https://github.com/snrahimi/first-light-podcast/settings/secrets/actions
-5. Choose New repository secret. Enter the exact name GEMINI_API_KEY and paste your key into the secret value. Save.
-6. Never paste the key into chat, Issues, README files, public code, or GitHub Variables.
+- Select **approximately seven news stories**, not a fixed dump of 15–16 RSS
+  headlines. Lead with two high-impact stories, then short globally diverse
+  reports, business, science and technology.
+- Use a transparent deterministic ranking algorithm: freshness, source
+  diversity, potential significance, geographic diversity and novelty.
+- Use a radio-style script outline: informative opening, two explained lead
+  stories, quick briefs, actionable local weather, and what to watch.
+- Narrate primarily with the **Gemini 3.8 Flash TTS Charon** voice the listener
+  selected. If unavailable, use Kokoro FP16 Adam, then Piper locally.
+- Apply safe abbreviation expansions to improve pronunciation without
+  inventing pronunciations of international names.
+- Normalize and encode MP3 at **192 kbps**. The automated checks reject
+  invalid/implausibly short MP3s and log true duration and actual narrator.
+- The 5–7-minute target is checked; a headline-only source fallback can be
+  shorter. No padding with unsourced facts to force a specific length.
+- Explain AI assistance at the beginning of the spoken episode and in RSS.
 
-The workflow uses the newer `gemini-3.5-flash-lite` by default, and tries `gemini-3.1-flash-lite` when the selected model is unavailable (HTTP 404). Older Gemini 2.5 models can return HTTP 404 for newly created API projects. The workflow and prompts for approximately 760–890 spoken words. It passes only public RSS headline/summary text and public weather data to Gemini. No private information is sent.
+### Phase 2: Source transparency and memory
 
-If Gemini quota is exhausted, the model is unavailable, or the key is absent, a simpler, attributed, no-API script is used automatically. The fallback is less polished and might be shorter than 5 minutes. The spoken episode still uses free local narration.
+- Publisher RSS **article URLs are restricted to approved publisher domains**.
+  News timestamps are checked; feeds older than 42 hours are not included.
+- Cluster closely related headlines from different publishers and preserve
+  source links and short descriptions. **Clustering is not proof that a
+  factual claim was independently verified**. These are corroborating
+  *topic-level* leads for human verification, not article-level fact checks.
+- Treat single-source claims as attributed reporting. The Gemini script prompt
+  forbids unsourced context, invented market data, quotes or speculative causes.
+- The previous seven days of published topic metadata are read from GitHub
+  Release notes. Repeated headlines are deprioritized or skipped; possible
+  follow-ups include the previous headline/date, but must not be characterized
+  as confirmed changes without evidence. The first version 2 run has no
+  prior metadata to consult; it builds up over subsequent broadcasts.
+- Provide a public [correction request form](../../issues/new/choose) and
+  [corrections policy](CORRECTIONS.md). Requests are **not automatically
+  checked by a human**; the repository owner must review and resolve them.
+- Save an episode's editorial audit, sources and compact previous-episode
+  memory in its GitHub Release notes. The notes are **public**.
+- Use Open-Meteo with NWS backup and separate NWS alert checks. If the
+  forecasts cannot be verified, say so rather than invent weather details.
 
-Google may use Gemini Free tier content to improve products under its terms. A key attached to a paid Gemini project could incur charges; use a Free tier project and check the usage dashboard. Current info: https://ai.google.dev/gemini-api/docs/pricing
+### Current limitations
 
-## First episode
+The system does **not** have human editors, full-text article fact-checking,
+independent interviews, a licensed newswire subscription or a guarantee
+against Gemini hallucinations. Short RSS feeds can provide insufficient facts
+to explain why something matters; when details are sparse, the script should
+remain concise. Important stories require checking linked original sources.
+Do not distribute unlicensed publisher text or copyrighted podcast audio.
 
-1. Enable GitHub Pages at https://github.com/snrahimi/first-light-podcast/settings/pages and select GitHub Actions as its build source.
-2. Open https://github.com/snrahimi/first-light-podcast/actions/workflows/daily.yml and choose Run workflow.
-3. Check the workflow logs and verify that a fresh GitHub Release contains an MP3. A production run can fail if RSS/voice model downloads are unreachable, source coverage is sparse, or Pages hasn't been configured.
-4. Once successfully deployed, visit https://snrahimi.github.io/first-light-podcast/ and check https://snrahimi.github.io/first-light-podcast/feed.xml
+## Services and cost
 
-## iPhone wake-up playback
+- **News sources:** Permitted public BBC, NPR, Guardian and Al Jazeera RSS
+  feeds, stored as headline metadata and links.
+- **AI script:** Optional Gemini key (default gemini-3.5-flash-lite with a
+  free-tier model alternative). A source-attributed template is the backup.
+- **AI voice:** Gemini 3.8 Flash TTS Charon. Kokoro FP16 Adam and Piper are
+  local backup voices.
+- **Weather:** Open-Meteo / National Weather Service.
+- **Hosting:** GitHub Releases MP3 archives and GitHub Pages podcast site.
+- **Schedule:** 3:30 AM America/Chicago; target listen time 5 AM.
 
-Add a Daily 5:00 AM personal automation in Apple Shortcuts. Retrieve https://snrahimi.github.io/first-light-podcast/latest.json, verify the date matches today in San Antonio, download audio_url, set volume and Play Sound. Test on a locked phone with your actual audio routing. Keep a separate phone alarm: GitHub scheduling or iOS automations may run late or fail.
+**Costs:** No OpenAI or ElevenLabs APIs are called by the active daily workflow.
+The Gemini API **may incur charges** if your Google project has paid billing
+enabled. Confirm that your project/model combination really has free-tier
+access and sufficient limits. Free quotas and pricing can change. There is no
+application-level hard-dollar spend cutoff. GitHub public-repository runner
+availability and API quotas also remain subject to provider policies.
 
-## How the audio is produced
+## One-time setup
 
-- Live headlines from BBC, NPR, Guardian and Al Jazeera news RSS, with date filters and linked sources; no copied full articles.
-- Local San Antonio forecast from Open-Meteo plus an attempted National Weather Service alert check.
-- Original narration generated using optional Free tier Gemini API or a simple attributed headline fallback.
-- Preferred narration: the selected Gemini Charon voice via the configured `GEMINI_API_KEY`. Free local Kokoro FP16 voice `am_adam`, then Piper, are fallback narrators. Audio uses MP3 192 kbps with loudness normalization.
-- Episode archives in GitHub Releases, a podcast RSS feed and website in GitHub Pages.
-- All GitHub Pages and Releases podcast content is **public**, not a private feed.
+1. Create an API key at https://aistudio.google.com/apikey using an
+   appropriately configured **Gemini Free tier** project.
+2. Store it as GitHub Actions repository secret **GEMINI_API_KEY** at
+   https://github.com/snrahimi/first-light-podcast/settings/secrets/actions .
+   Never paste the key into code, chat, Issues, README or Variables.
+3. Enable **GitHub Actions** as the Pages build source:
+   https://github.com/snrahimi/first-light-podcast/settings/pages
+4. From [First Light Daily Podcast (Free)](../../actions/workflows/daily.yml),
+   choose **Run workflow** on the main branch.
+5. Check the run logs, the edition's GitHub Release, the live player and the
+   feed. Automated unit tests are not a substitute for one real end-to-end test.
 
-The legacy ElevenLabs voice-test workflow was removed because the active podcast uses only free local voices. The daily workflow never uses paid OpenAI or ElevenLabs APIs; remove those legacy API secrets from GitHub if they are no longer needed.
+Expected site after a successful deployment:
 
-## Important limits
+- https://snrahimi.github.io/first-light-podcast/
+- https://snrahimi.github.io/first-light-podcast/feed.xml
+- https://snrahimi.github.io/first-light-podcast/latest.json
+- https://snrahimi.github.io/first-light-podcast/latest.mp3
 
-Free Gemini quotas/models can change. Free services can throttle or fail. A public news headline feed is not independently fact-checked, and the AI script can contain inaccuracies, so verify consequential reports with the linked original outlets. Publisher terms govern use of their feeds. GitHub Actions public-repository runner usage is normally free within GitHub's current terms, and the repository contents are public.
+## iPhone automation
 
-## Weather service reliability
+Use Shortcuts → Automation → Time of Day **5 AM Daily**. Retrieve
+latest.json and verify that its date matches today in America/Chicago
+before playing the audio_url; otherwise don't play yesterday's news as
+current. Test playback on a locked phone and keep a separate wake-up alarm.
+GitHub Actions scheduling and iOS automations are best effort.
 
-Open-Meteo requests have bounded connection/read timeouts and retry temporary network failures. If Open-Meteo remains unreachable, the script attempts an official National Weather Service period forecast. If both providers are unavailable, the podcast explicitly says weather could not be verified and does **not** invent temperatures, wind or precipitation. National Weather Service alert checks are separate and can also be unavailable. This allows the episode to continue even if a weather provider is temporarily down.
+## Quality assurance
 
-GitHub Actions were upgraded to Node.js 24-compatible releases for the daily pipeline and source validation.
+Run python -m unittest discover -s tests -v and
+python -m py_compile src/first_light.py src/editorial.py. The CI job
+automatically performs these tests, including simulated provider failures
+and checks of story selection, source domains, publication memory,
+Gemini audio assembly, and audio QC.
 
-## GitHub Pages artifact indexing fix
+The daily production process inspects the actual MP3 before creating a
+Release and includes its narrator, duration, script source, source diversity
+and repeat-avoidance statistics in the public latest.json metadata.
 
-The upload can succeed before GitHub's Actions API reports the `github-pages` artifact to the deployment step. The production workflow grants `actions: read` and waits for the uploaded artifact to become visible (up to 90 seconds) before calling `deploy-pages@v5`. A separate `punycode` Node warning is nonfatal and originates within action dependencies.
-
-## Gemini Charon voice and usage
-
-The Charon audition was approved as the default daily narrator. The production workflow synthesizes the narration in sentence-aligned sections with the same model and voice configuration used in the audition, combines the resulting WAV sections, and encodes a 192 kbps MP3. If Gemini audio generation fails, Kokoro FP16 and then Piper run locally. **Google Gemini requests may incur charges if the API key is linked to a paid billing project**. Inspect the billing tier and usage limits of the project before enabling daily production. Free-tier availability and quotas can change.
+If a full production run fails, use its GitHub Actions log to distinguish
+source availability, weather outages, Gemini quota, speech production,
+GitHub Release publication and Pages artifact deployment.
