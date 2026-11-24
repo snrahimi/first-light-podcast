@@ -130,9 +130,13 @@ def main():
     finally:
         temp.unlink(missing_ok=True)
     (output / "script.txt").write_text(SAMPLE + "\n", encoding="utf-8")
+    (output / "attribution.txt").write_text(
+        "Generated with ElevenLabs. Noncommercial voice evaluation only.\n",
+        encoding="utf-8",
+    )
     (output / "metadata.json").write_text(
         json.dumps({
-            "purpose": "Noncommercial, manual-only private voice comparison",
+            "purpose": "Noncommercial, manual-only voice comparison",
             "production_changed": False,
             "model": MODEL,
             "audio_format": OUTPUT_FORMAT,
@@ -146,7 +150,7 @@ def main():
     )
     print(
         f"Voice sample verified: {duration:.1f}s; "
-        "one ElevenLabs request; private artifact only; Charon unchanged."
+        "one ElevenLabs request; audition artifact only; Charon unchanged."
     )
 
 
