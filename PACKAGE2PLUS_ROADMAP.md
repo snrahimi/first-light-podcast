@@ -2,7 +2,7 @@
 
 Implementation and acceptance ledger. Updated November 24, 2026.
 
-Package 2+.5 details are below; no new paid provider or narrator is enabled.
+Package 2+.5 and 2+.6 details are below; no new paid provider or narrator is enabled.
 
 **Scope:** 46 core proposed capabilities plus 7 strongly recommended
 operational features. These are *capabilities*, not 53 separate deployable
@@ -81,6 +81,67 @@ existing live production evidence. "Partial" means only some safeguards exist.
 | E. API usage and quota controls | Partial 2+.1/2+.4 | Writer requests/retries/cache hits recorded, hard retry ceilings, 429 fail-fast; provider-level quota/spend accounting not available |
 | F. Audio/pronunciation QA | Partial 2+.3 | Common official acronyms and MP3 integrity checks; no full proper-name QA or automated clipping scan |
 | G. Rolling 30-day quality report | Implemented 2+.4 | Completeness, Charon duration, fallback, official page and text-request metrics only for releases with health metadata |
+
+## Package 2+.6: Editorial depth and broadcast consistency (validation pending)
+
+**Production basis:** November 24 Package 2+.5 live run #45473188568
+published a 541-word, 206.9-second Charon episode. Both Gemini writer
+sections succeeded (205 + 194 words), but the target remains 5–7 minutes.
+The release also had zero additional related publisher/agency feed reports,
+and both top world leads were United Nations press releases.
+
+### Changes
+
+1. **More legally limited source context.** Publisher RSS descriptions are
+   retained up to 260 characters, with evidence-ledger excerpts capped at
+   240 characters (previously 195). Primary agency feeds retain up to 260
+   characters of source context. For the selected, allowlisted **official
+   agency pages only**, raise the edition cap from 3 to 4 retrievals and allow
+   up to four distinct short, exact excerpts from a source, while keeping
+   a 1,900-character upper bound on quoted agency source context.
+   Headline-anchored adjacent agency paragraphs may be included when they
+   share substantive subject words; unrelated page blocks still stop
+   extraction. Never scrape full third-party news articles, follow arbitrary
+   GDELT discovery links as evidence, or claim an external fact check.
+2. **Related-source expansion.** Up to three additional related feed reports
+   may attach per world lead, and up to two per other story, but **only**
+   from already ingested allowlisted RSS/agency feeds with conservative
+   event matching and exact-source ledger checks. If nothing matches,
+   honestly report zero instead of inventing corroboration.
+3. **Evidence-weighted broadcast budgets.** The two existing Gemini text
+   requests receive clearer distinct-detail instructions and word budgets
+   that reward genuinely substantive feed excerpts and agency statements.
+   If a section delivers below 65% of its advisory evidence-weighted
+   word target, a public editorial scorecard flag records its actual and
+   planned words. **No extra length-only revision or model calls** are made.
+   Even extensive available evidence cannot guarantee five minutes;
+   publishing a shorter accurate edition remains acceptable.
+4. **Source diversity and business impact.** Give a soft 16-point
+   near-tie penalty to a second world lead from the same lead publisher,
+   without excluding important same-publisher breaking news. Broader
+   international macroeconomic impact gets an additional small business
+   ranking bonus over consumer-lifestyle stories. Record distinct
+   lead publishers and regions in the editorial metadata.
+5. **Safety unchanged:** Gemini Charon is the sole voice; zero new
+   paid services or alternate text models; numerical source checking,
+   publisher-domain restrictions, article-copyright boundaries, and
+   human-review warnings remain in force.
+
+### Acceptance
+
+- Offline regression suite on PR and merged main must pass, including
+  validated issuer-only agency extraction, exclusion of unrelated paragraphs,
+  source-bounded excerpt selection, factual/number gate, high-impact
+  exceptions to publisher diversity, and zero added Gemini API calls.
+- Live acceptance requires a *new* main-branch production run, with
+  measured Charon audio duration, genuine additional source coverage
+  and under-delivery metadata checked. Passing CI does **not** prove the
+  5–7-minute target or independent factual verification.
+- Known limitation: Many ordinary publisher RSS descriptions are just
+  one headline-like sentence; evidence may remain thin despite these
+  enhancements. Human editorial review is still needed for sensitive facts.
+
+---
 
 ## Package 2+.5: Reliability and editorial quality (CI passed, live pending)
 
