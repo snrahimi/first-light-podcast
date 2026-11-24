@@ -769,7 +769,7 @@ def _tts_piper(script,destination):
     with wave.open(str(destination),"wb") as wav:
         speaker.synthesize_wav(script,wav)
 
-def _gemini_chunks(script, max_words=210):
+def _gemini_chunks(script, max_words=400):
     """Split at sentence boundaries to avoid very long TTS requests."""
     if max_words < 40:
         raise ValueError("max_words too small")
@@ -824,11 +824,69 @@ def _gemini_speech_payload(text):
     }
 
 
-def _charon_segment(text_chunk, index, total):
-    """One speech segment with bounded retries for transient service failures.
+def _charon_429_category(response):
+    """Classify *known* Google quota metadata without logging provider bodies.
 
-    Log only HTTP status codes, segment numbers and exception types. Never
-    expose keys, response bodies, provider diagnostics or private audio.
+    Returns (category, retry_seconds). UNKNOWN is deliberately retained when
+    Google does not provide a recognized quotaId or RetryInfo.
+    """
+    category, retry_seconds = "unknown", None
+    try:
+        payload = response.json()
+        error = payload.get("error", {}) if isinstance(payload, dict) else {}
+        if not isinstance(error, dict):
+            error = {}
+        message = str(error.get("message", "")).lower()
+        details = error.get("details", [])
+        for detail in details if isinstance(details, list) else []:
+            if not isinstance(detail, dict):
+                continue
+            kind = str(detail.get("@type", ""))
+            if "QuotaFailure" in kind:
+                for violation in detail.get("violations", []):
+                    if not isinstance(violation, dict):
+                        continue
+                    marker = (str(violation.get("quotaId", "")) + " " +
+                              str(violation.get("quotaMetric", ""))).lower()
+                    if "perday" in marker or "per_day" in marker or "daily" in marker:
+                        category = "daily"
+                    elif "perminute" in marker or "per_minute" in marker:
+                        if category != "daily":
+                            category = "minute"
+            elif "RetryInfo" in kind:
+                match = re.fullmatch(
+                    r"(\d+(?:\.\d+)?)s", str(detail.get("retryDelay", ""))
+                )
+                if match:
+                    retry_seconds = float(match.group(1))
+        if category == "unknown":
+            # Provider messages may include human-readable quota categories
+            # even when structured metadata is absent. Never print this text.
+            if re.search(r"(per day|daily quota|requests? per day)", message):
+                category = "daily"
+            elif re.search(r"(per minute|minute quota|requests? per minute)", message):
+                category = "minute"
+    except (ValueError, TypeError, AttributeError):
+        pass
+    # Respect a standards-based Retry-After only when no richer retry info exists.
+    if retry_seconds is None:
+        header = getattr(response, "headers", None)
+        if header is not None:
+            try:
+                raw = header.get("Retry-After", "")
+                if re.fullmatch(r"\d+(?:\.\d+)?", str(raw)):
+                    retry_seconds = float(raw)
+            except (TypeError, ValueError, AttributeError):
+                pass
+    return category, retry_seconds
+
+
+def _charon_segment(text_chunk, index, total):
+    """One Charon segment, with quota-aware retry and no alternative narrator.
+
+    Daily or long-cooldown exhaustion fails quickly. A temporary HTTP 429 is
+    retried only once, and 5xx/network errors at most twice. Neither response
+    bodies nor API keys are included in logs or raised exceptions.
     """
     key = required("GEMINI_API_KEY")
     endpoint = "https://generativelanguage.googleapis.com/v1beta/interactions"
@@ -855,10 +913,38 @@ def _charon_segment(text_chunk, index, total):
         status = response.status_code
         if status == 200:
             return response
-        if status in (429, 500, 502, 503, 504) and attempt < 3:
-            # 429 may mean temporary throttling or a daily quota limit. Never
-            # assume that retrying will restore quota or that paid is enabled.
-            pause = (35 * attempt if status == 429 else 12 * attempt)
+        if status == 429:
+            category, retry_seconds = _charon_429_category(response)
+            if category == "daily" or (
+                retry_seconds is not None and retry_seconds > 120
+            ):
+                LOG.error(
+                    "Gemini Charon segment %d/%d HTTP 429: quota category=%s; "
+                    "provider cooldown too long for this run. "
+                    "Check this project's TTS limits in Google AI Studio.",
+                    index, total, category,
+                )
+                raise RuntimeError(
+                    f"Gemini Charon segment {index}/{total} failed: "
+                    f"HTTP 429, quota category={category} (no audio published)"
+                )
+            if attempt == 1:
+                wait = max(35, min(120, int(retry_seconds or 35) + 1
+                                    if retry_seconds is not None else 35))
+                LOG.warning(
+                    "Gemini Charon segment %d/%d HTTP 429: quota category=%s; "
+                    "one final retry in %ds",
+                    index, total, category, wait,
+                )
+                time.sleep(wait)
+                continue
+            raise RuntimeError(
+                f"Gemini Charon segment {index}/{total} failed: "
+                f"HTTP 429, quota category={category} after {attempt} "
+                "attempt(s). Check project usage/rate limits."
+            )
+        if status in (500, 502, 503, 504) and attempt < 3:
+            pause = 12 * attempt
             LOG.warning(
                 "Gemini Charon segment %d/%d HTTP %d; retry %d/2 in %ds",
                 index, total, status, attempt, pause,
