@@ -15,7 +15,7 @@ existing live production evidence. "Partial" means only some safeguards exist.
 | 2+.1 | Resilient Gemini writer, bounded HTTP 503/5xx and connection retries, 429 fail-fast, same-evidence 12-hour section cache across workflows | #10 | 80 offline tests |
 | 2+.2 | Conservative same-event paraphrase matching, evidence-depth curation bonus, freshness and high-stakes review dossiers | #11 | 83 offline tests |
 | 2+.3 | Public editorial scorecard, sensitive and disagreement flags, repeated-sentence detection, priority verified severe NWS notices, pronunciation | #12 | 88 offline tests |
-| 2+.4 | 30-day publication dashboard, GitHub-only daily delivery watchdog and issue alerts, revision-labelled asset archives, correction request template | #13 | CI acceptance pending at time of documentation |
+| 2+.4 | 30-day publication dashboard, GitHub-only daily delivery watchdog and issue alerts, revision-labelled asset archives, correction request template | #13 | 96 offline tests |
 
 ### Core capabilities (46)
 
