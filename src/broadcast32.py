@@ -365,6 +365,7 @@ For each story, state (1) the specific attributed development, (2) distinct
 supporting details found in the source excerpts, and (3) a clearly sourced
 explanation of consequences or next steps, ONLY if those are actually stated
 in the excerpts. Explicitly identify important unknowns rather than guessing.
+Say what remains unknown without inventing an answer or suggesting certainty.
 Do not fill missing evidence with history, conclusions, or generalities.
 Be substantive, fluent, neutral, precise and concise.
 
