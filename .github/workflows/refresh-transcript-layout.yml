@@ -1,0 +1,67 @@
+name: Refresh Published Transcript Layout (No TTS)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+# Prevent a site-only refresh from replacing a newer daily publication.
+concurrency:
+  group: first-light-daily
+  cancel-in-progress: false
+
+jobs:
+  transcript-refresh:
+    name: Format current public transcript (preserve audio and RSS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate transcript-only refresh offline
+        run: |
+          python -m unittest discover -s tests -p 'test_site_refresh.py' -v
+
+      - name: Fetch existing public site and format transcript ONLY
+        run: python -m src.refresh_transcript_site
+
+      - name: Upload complete Pages snapshot (existing audio/rss untouched)
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Confirm Pages artifact is indexed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+                 --jq '[.artifacts[].name] | index("github-pages") != null' | grep -qx 'true'; then
+              echo "github-pages artifact indexed (attempt ${attempt})."
+              sleep 8
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Pages artifact not visible after indexing retries."
+          exit 1
+
+      - name: Publish transcript layout only
+        id: deployment
+        uses: actions/deploy-pages@v5

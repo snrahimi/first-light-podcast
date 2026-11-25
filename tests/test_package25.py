@@ -123,7 +123,7 @@ class Package25Tests(unittest.TestCase):
         weather = {"source": "unavailable", "nws_alert_check": "unavailable"}
         short = first_light.fallback_readout(NOW, edition, weather)
         enriched = first_light.fallback_readout(NOW, edition, weather, dossiers)
-        self.assertIn("Second Publisher adds:", enriched)
+        self.assertIn("Second Publisher also reports:", enriched)
         self.assertNotIn("Second Publisher adds:", short)
         self.assertGreater(len(enriched.split()), len(short.split()))
         self.assertIn("artificial intelligence assistance", enriched)

@@ -521,3 +521,54 @@ Reference: [Default voice retirement](https://elevenlabs.io/docs/help-center/pro
 
 [ElevenLabs free-plan licensing](https://elevenlabs.io/docs/overview/administration/billing)
 · [Default voice retirement](https://elevenlabs.io/docs/help-center/product/voices/my-voices/what-are-default-voices)
+
+## November 25, 2026: original broadcast storytelling and readable transcripts
+
+**What we're borrowing as editorial principles:** strong news leads, an
+intelligible story arc (reported development → sourced context → what is
+actually known to come next), meaningful transitions, depth for two world
+leads, concise distinct briefs, and a quick conversational sign-off.
+This is an **original one-presenter** newsroom format, not an imitation
+of an existing broadcaster's language, journalists, interview format,
+production cues, or sound design. No unsourced claims, invented quotes,
+fabricated conversations, or invented reasons why a development matters.
+
+The Gemini writing prompts for First Light now explicitly prioritize
+whole stories, coherent transitions and an informative lead sentence.
+The original news evidence gate and word-budget limitations remain in
+place. If Gemini writing fails, the deterministic source-only script
+**omits** truncated publisher summaries instead of reading a chopped-off
+sentence as news, and keeps its own source attribution. It may then be
+shorter; the system never pads with unsupported details.
+
+The **web transcript** is presentation-only: chapters for Introduction,
+World Headlines, Around the World, Business & Markets, Science,
+Technology & Cybersecurity, San Antonio Weather and Closing Notes when
+those spoken markers exist. Generated news text with fewer distinct
+transition markers gets correspondingly broader sections, plus
+readable paragraphs. The wording of the spoken script, MP3 and plain
+transcript asset are unchanged by the display renderer.
+
+The site has linked topic navigation, accessible HTML headings,
+readable paragraphs, a 70-character text measure, mobile-friendly
+typography, and HTML escaping of publisher content. **No chapter
+timestamps** are invented because the current audio has no source-grounded
+word-level time alignment.
+
+### Refresh the existing published transcript without spending credits
+
+Run [Refresh Published Transcript Layout (No TTS)](
+.github/workflows/refresh-transcript-layout.yml) from GitHub Actions
+on the **main** branch, using **Run workflow**. It fetches the currently
+published site's exact MP3, RSS, source evidence, JSON metadata, cover
+and other generated site files, then changes **only index.html**. It
+refuses to deploy if required published assets are missing or the audio
+doesn't match the current episode date. All non-HTML site file bytes
+are checked for unchanged hashes before deployment. The workflow
+uses the daily production lock and no Gemini/ElevenLabs APIs.
+It does not create a new GitHub Release or rewrite old episodes.
+
+Future daily broadcasts automatically use the new web transcript
+renderer and the improved original storytelling prompts. Scripts still
+depend on available RSS/official-source evidence: an AI-generated
+script is not independently fact-checked simply because it sounds polished.

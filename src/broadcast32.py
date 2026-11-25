@@ -263,20 +263,26 @@ def _materials_for(material, sections):
 def _prompt(now, part, material, target, beat_plan=None):
     if part == "world":
         assignment = (
-            "Part A: explain the TWO lead world topics with clear attribution, "
-            "then give short, geographically diverse reports from the "
-            "Around the world section. Include what happened, supported "
-            "context and the significance ONLY when the supplied material "
-            "explains it. Distinguish UN agency statements from independent "
-            "reporting. Do not include business, science, technology or weather."
+            "Part A: open with a compelling, source-grounded lead sentence about "
+            "the most important actual development. Then explain the TWO "
+            "lead world stories with a coherent beginning, supporting details "
+            "and what is still unknown. Give shorter, distinct reports from "
+            "Around the world. The second lead must have its own fresh opening, "
+            "not be a second reading of the same event. Include significance "
+            "ONLY when source evidence explicitly supports it. Distinguish "
+            "official agency statements from independently reported claims. "
+            "Do not include business, science, technology or weather."
         )
     else:
         assignment = (
-            "Part B: give business/economy, science and technology/cybersecurity "
-            "updates in the provided order. Close this part with a succinct "
-            "what-to-watch, grounded ONLY in the provided developments. "
-            "Do not restate the world lead stories or mention weather, which "
-            "will be appended from live deterministic forecast data."
+            "Part B: move naturally from business/economy through science and "
+            "technology/cybersecurity. For each substantive story, lead with "
+            "the concrete development, explain the most useful distinct "
+            "source-backed detail, and note a next step ONLY if reported. "
+            "Use concise verbal pivots between beats, not section labels or "
+            "a list of publisher names. Close with what is known to be next "
+            "ONLY when the supplied sources establish it. Do not restate "
+            "world leads or mention weather, which is appended separately."
         )
     return f"""You are a rigorous, engaging professional news producer.
 Write a self-contained spoken-narration SECTION for First Light: World Report.
@@ -300,6 +306,34 @@ explanation of consequences or next steps, ONLY if those are actually stated
 in the excerpts. Explicitly identify important unknowns rather than guessing.
 Do not fill missing evidence with history, conclusions, or generalities.
 Be substantive, fluent, neutral, precise and concise.
+
+BROADCAST EDITORIAL STRUCTURE (original, single-presenter newsroom voice):
+- Think in complete STORIES, not an RSS headline-reading list.
+- For each of the two world leads: start with an informative, listener-
+  facing development or question whose premise is supported by the evidence.
+  Within two sentences identify who is reporting or asserting it. Then
+  develop the timeline or concrete details actually in the supplied
+  reporting, explain only source-supported stakes, and distinguish what
+  remains unknown. Do not manufacture an answer to a rhetorical question.
+- Give a story room only when substantive excerpts actually support depth.
+  A bare headline is a short brief, not a manufactured background analysis.
+- Use smooth, specific transitions, but NEVER claim an invented causal
+  connection between adjacent events. No filler or recurring generic
+  "In its summary, [publisher] adds" constructions.
+- Avoid robotic formulas such as "[outlet] reports:" repeated for every
+  paragraph, and do not literally quote partial RSS fragments.
+- When two sources cover the same event, integrate them into ONE coherent
+  update with attribution; do not repeat the headline as a new event.
+- Keep all sentences natural for one voice reading aloud. No fictional
+  correspondents, hosts, dialogues, interviews, soundbites, stage directions,
+  music cues, headlines read as a flat list, or invented witness statements.
+- Write ORIGINAL explanation, never paraphrase the prose, distinctive
+  turns of phrase or multi-host banter of any particular news podcast.
+- For a 5–7 minute briefing, favor two well-explained leads plus concise
+  distinct briefs, not 15 unconnected headlines.
+- A meaningful, sourced follow-up or an honest unknown is better than
+  generic filler about how "the situation continues to develop".
+
 Natural broadcast transitions; no headings, markdown, bullets, stage
 directions, generic disclaimers repeated after each story, fake citations,
 unattributed factual assertions or speculative conclusions.
@@ -315,7 +349,10 @@ STRICT SOURCE BOUNDARIES:
 - Explain why something matters only when a source excerpt supports it.
 - Never repeat text to meet the word target or disclose invented reporting.
 - Paraphrase attributed findings in original narration: do not quote
-  long verbatim chunks of publisher prose or turn RSS into a copied article.
+  long verbatim chunks of publisher prose, mimic a specific show, or turn
+  RSS into a copied article.
+- Truncated or unfinished excerpts must NEVER be pronounced as complete
+  news sentences. Omit missing context instead of filling it in.
 - An advisory word budget is not permission to introduce external knowledge.
 - No source URLs spoken aloud and no unsupported sweeping statements.
 - For elections, wars, casualties, sanctions, public-health emergencies
@@ -444,10 +481,9 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
 
     opening = (
         f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}. "
-        "This is First Light: World Report, your source-linked international "
-        "morning briefing. This report is produced with AI assistance. "
-        "We'll distinguish confirmed agency statements and attributed "
-        "publisher reports from details that remain uncertain."
+        "This is First Light: World Report. Today's news is produced with "
+        "AI assistance, with reports attributed to their original sources. "
+        "You'll find source links and corrections in our show notes."
     )
     closing = (
         "That's First Light: World Report. You can read the original "

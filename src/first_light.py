@@ -27,7 +27,7 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production, transcript_display
 else:
     import editorial
     import newsroom3
@@ -36,6 +36,7 @@ else:
     import quality2plus
     import monitor2plus
     import elevenlabs_production
+    import transcript_display
 import base64
 import io
 import wave
@@ -459,6 +460,29 @@ def early_weather_alert_intro(weather):
     return ""
 
 
+def _complete_fallback_excerpt(value, *, limit=260):
+    """Read only whole sourced sentences, never clipped RSS fragments.
+
+    An RSS summary ending mid-sentence may be a truncated publisher snippet,
+    not news we can safely finish or paraphrase. Discard unfinished tails.
+    Omit the excerpt entirely when no complete sentence fits.
+    """
+    raw = tidy(value, 4000)
+    if not raw:
+        return ""
+    clipped = raw[:limit]
+    # Prefer the last whole sentence that ends within the safe word budget.
+    ends = list(re.finditer(r"[.!?](?=\s|$)", clipped))
+    if not ends:
+        return ""
+    cutoff = ends[-1].end()
+    whole = clipped[:cutoff].strip()
+    # Guard against attribution-only abbreviations and meaningless stubs.
+    if len(whole.split()) < 7:
+        return ""
+    return whole
+
+
 def _source_depth_for_fallback(story, card):
     """Optional additional, already source-checked excerpts for a spoken brief.
 
@@ -475,7 +499,9 @@ def _source_depth_for_fallback(story, card):
         if claim.get("evidence_field") != "summary":
             continue
         publisher = claim.get("publisher", "")
-        excerpt = tidy(claim.get("evidence", ""), 195)
+        excerpt = _complete_fallback_excerpt(
+            claim.get("evidence", ""), limit=260
+        )
         low = excerpt.lower()
         if (len(excerpt.split()) < 7 or not publisher or
                 any(low in old or old in low for old in used if old)):
@@ -485,19 +511,21 @@ def _source_depth_for_fallback(story, card):
             continue
         used.add(low)
         seen_sources.add(key)
-        details.append(f"{publisher} adds: {excerpt}.")
+        details.append(f"{publisher} also reports: {excerpt}")
         if len(details) >= 2:
             break
     if len(details) < 2:
         for document in card.get("official_context", []):
             publisher = document.get("publisher", "")
             for paragraph in document.get("excerpts", []):
-                excerpt = tidy(paragraph, 160)
+                excerpt = _complete_fallback_excerpt(paragraph, limit=280)
                 low = excerpt.lower()
                 if (len(excerpt.split()) < 10 or not publisher or
                         any(low in old or old in low for old in used if old)):
                     continue
-                details.append(f"In its published statement, {publisher} says: {excerpt}.")
+                details.append(
+                    f"In a published statement, {publisher} says: {excerpt}"
+                )
                 used.add(low)
                 break
             if len(details) >= 2:
@@ -514,11 +542,10 @@ def fallback_readout(now, edition, weather, dossiers=None):
     """
     parts = [
         f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}.",
-        "This is First Light: World Report, with the day's international "
-        "developments, business, science, technology and local weather. "
-        "This briefing is produced with artificial intelligence assistance. "
-        "We attribute claims to publishers and issuing agencies. Our automated "
-        "source checks do not establish their truth. Source links are in the show notes.",
+        "This is First Light: World Report, with international developments, "
+        "business, science, technology and local weather. "
+        "This briefing is produced with artificial intelligence assistance, attributing reporting to its publishers "
+        "and issuing agencies. Source links and corrections are in the show notes.",
     ]
     priority_weather = early_weather_alert_intro(weather)
     if priority_weather:
@@ -537,12 +564,17 @@ def fallback_readout(now, edition, weather, dossiers=None):
         for index, story in enumerate(stories):
             publisher = tidy(story["publisher"], 80)
             title = tidy(story["title"], 220).rstrip(".!")
-            parts.append(f"{publisher} reports: {title}.")
-            summary = tidy(story.get("short_summary", ""), 165).rstrip(".!")
-            if (len(summary.split()) >= 6 and
-                    summary.lower() not in title.lower() and
-                    title.lower() not in summary.lower()):
-                parts.append(f"In its summary, {publisher} adds: {summary}.")
+            if title.endswith("?"):
+                parts.append(f"{publisher} examines this question: {title}")
+            else:
+                parts.append(f"{publisher} reports: {title}.")
+            summary = _complete_fallback_excerpt(
+                story.get("short_summary", ""), limit=300
+            )
+            if (summary and summary.lower() not in title.lower()
+                    and title.lower() not in summary.lower()):
+                # Same source, not a second independently verified report.
+                parts.append(f"The same report adds: {summary}")
             card = None
             if isinstance(dossiers, dict):
                 cards = dossiers.get(section, [])
@@ -1459,6 +1491,7 @@ body{{background:#0a1729;color:#edf2f8;font:18px/1.65 system-ui,sans-serif;
 max-width:770px;margin:40px auto;padding:0 20px}}a{{color:#ffc18b}}
 h1{{font-size:clamp(2rem,7vw,3.6rem);line-height:1.12}}img{{width:165px;border-radius:18px}}
 audio{{display:block;width:100%;margin:30px 0}}
+{transcript_display.TRANSCRIPT_CSS}
 .subtitle{{color:#b7c6d7}}footer{{font-size:14px;color:#b7c6d7;margin:50px 0}}
 </style></head><body>
 <img src="cover.png" alt="First Light cover artwork">
@@ -1473,7 +1506,8 @@ audio{{display:block;width:100%;margin:30px 0}}
 <a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
 {voice_credit}
 <h2>Sources</h2><ol>{links}</ol>
-<h2>Transcript</h2><p>{html.escape(transcript)}</p>
+<h2 id="transcript">Transcript</h2>
+{transcript_display.render_transcript(transcript)}
 <footer>AI-assisted briefing. Related publisher headlines are not independent fact verification. Follow linked original reporting.
 Keep a separate wake-up alarm: publication and iPhone automation are best effort.</footer>
 </body></html>"""
