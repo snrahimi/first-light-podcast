@@ -81,13 +81,25 @@ def _editorial_beat_plan(material):
                 len(text.split()) >= 14 for _, text in distinct
                 if isinstance(text, str)
             )
+            complete_excerpts = sum(
+                len(text.split()) >= 14
+                and bool(re.search(r"[.!?](?=\s|$)", text))
+                for _, text in distinct
+                if isinstance(text, str)
+            )
+            # Richness is not determined by word volume alone. Short
+            # article snippets, especially truncated RSS descriptions,
+            # are not a license to write invented background.
+            explainable = complete_excerpts >= 2 or bool(official)
             budget = min(
                 220 if is_lead else 160,
                 (65 if is_lead else 42)
                 + min(6, len(distinct)) * (16 if is_lead else 12)
                 + min(4, len(official)) * 24
-                + min(4, long_excerpts) * 13,
+                + min(4, complete_excerpts) * 13,
             )
+            if is_lead and not explainable:
+                budget = min(120, budget)
             beats.append({
                 "section": section,
                 "headline": card.get("headline", ""),
@@ -95,14 +107,61 @@ def _editorial_beat_plan(material):
                 "distinct_attributed_excerpts": len(distinct),
                 "official_agency_excerpt_count": len(official),
                 "substantive_source_excerpts": long_excerpts,
+                "complete_source_excerpts": complete_excerpts,
+                "story_role": "world_lead" if is_lead else "short_report",
+                "narrative_depth": (
+                    "supported_explainer" if explainable else "brief_only"
+                ),
                 "editorial_instruction": (
-                    "Give priority to this lead: what the source actually "
-                    "reports, supported background, and what remains unknown"
+                    "Build a reported development -> substantive distinct "
+                    "evidence -> source-backed next step or honest unknown "
+                    "arc. If source support is thin, be concise."
                     if is_lead else
-                    "Brief, fully attributed update without repeating a lead"
+                    "Concise new development -> distinct supporting detail "
+                    "(only if evidenced) -> natural transition; no rehash."
                 ),
             })
     return beats
+
+
+def presentation_review(script, edition):
+    """Advisory newsroom QA, not a claim of source fact-checking.
+
+    Intended for public metadata and future editorial review; never
+    rejects a well-sourced short episode to satisfy a style score.
+    """
+    text = str(script or "")
+    robot = len(re.findall(r"\b(?:in its summary|the same report adds)\b",
+                           text, flags=re.I))
+    report_labels = len(re.findall(r"\breports\s*:", text, flags=re.I))
+    transitions = sum(bool(re.search(p, text, flags=re.I)) for p in (
+        r"\b(?:elsewhere|meanwhile|in other developments)\b",
+        r"\b(?:business|markets|economy)\b",
+        r"\b(?:science|researchers|scientists)\b",
+        r"\b(?:technology|cybersecurity)\b",
+        r"\b(?:weather|forecast)\b",
+    ))
+    leads = edition.get("rundown", {}).get("Top world headlines", [])
+    without_detail = sum(
+        not (story.get("explainer_support") or {}).get(
+            "complete_distinct_summaries", 0
+        ) for story in leads
+    )
+    notes = []
+    if robot + report_labels >= 5:
+        notes.append("Repeated headline-attribution formulas")
+    if without_detail:
+        notes.append("One or more lead topics have sparse RSS context")
+    if transitions < 3:
+        notes.append("Limited detectable topic transitions")
+    return {
+        "status": "advisory_only_not_independent_verification",
+        "script_words": len(text.split()),
+        "attribution_formula_count": robot + report_labels,
+        "topical_cues_present": transitions,
+        "lead_stories_with_scarce_feed_context": without_detail,
+        "editorial_notes": notes,
+    }
 
 
 def _condense(s):
