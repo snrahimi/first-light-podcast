@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """First Light: World Report daily podcast producer.
 
-Free RSS/Gemini-script news, resilient weather, Gemini Charon narration + local fallback.
+Source-grounded news, resilient weather, ElevenLabs Brian/ Daniel narration.
 Both episode hosting and source notes are PUBLIC. Never print secrets.
 """
 from __future__ import annotations
@@ -27,7 +27,7 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production
 else:
     import editorial
     import newsroom3
@@ -35,6 +35,7 @@ else:
     import broadcast32
     import quality2plus
     import monitor2plus
+    import elevenlabs_production
 import base64
 import io
 import wave
@@ -1170,14 +1171,19 @@ def _tts_gemini(script, destination):
 
 
 def synthesize(script, destination):
-    """Strict narrator policy: publish Charon or publish nothing.
+    """Brian primary, Daniel backup. Explicit Charon opt-out via repo variable.
 
-    An unapproved replacement voice is never used. Failure leaves the
-    existing episode and RSS/Pages untouched.
+    Never mix voices inside one recording or publish a partial episode.
+    Once audio is verified, higher-level publishing can proceed normally.
     """
+    mode = os.getenv("FIRST_LIGHT_NARRATOR", "elevenlabs").strip().lower()
+    if mode == "elevenlabs":
+        return elevenlabs_production.synthesize(script, destination)
+    if mode != "charon":
+        raise RuntimeError("Unsupported FIRST_LIGHT_NARRATOR mode")
     wav = WORK / "narration.wav"
     _tts_gemini(script, wav)
-    LOG.info("Verified narrator: Gemini Charon. Local voice fallback disabled.")
+    LOG.info("Verified narrator: Gemini Charon (explicit opt-out).")
     subprocess.run([
         "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
         "-i", str(wav), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
@@ -1394,8 +1400,13 @@ def xml_feed(releases, base):
         txt(item, "title", f"{TITLE} | {day}")
         txt(item, "link", release.get("html_url", base))
         ET.SubElement(item, "guid", {"isPermaLink": "false"}).text = release["tag_name"]
+        voice_credit = (
+            " Voice generated with ElevenLabs: https://elevenlabs.io."
+            if "Generated with ElevenLabs" in (release.get("body") or "")
+            else ""
+        )
         txt(item, "description", "AI-assisted sourced world news, business, science, technology and San Antonio weather. "
-            + "Full source links and transcript: " + base + "/")
+            + "Full source links and transcript: " + base + "/" + voice_credit)
         txt(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit", "false")
         date_value = release.get("published_at") or release.get("created_at")
         if date_value:
@@ -1430,11 +1441,16 @@ def cover(path):
     im.save(path, format="PNG")
 
 
-def web_page(day, sources, transcript):
+def web_page(day, sources, transcript, narrator="Gemini Charon"):
     links = "".join(
         f'<li><a href="{html.escape(s["url"], quote=True)}" rel="noopener noreferrer">'
         f'{html.escape(s["title"])}</a></li>'
         for s in sources
+    )
+    voice_credit = (
+        '<p>Voice generated with <a href="https://elevenlabs.io">'
+        'ElevenLabs</a> (' + html.escape(narrator) + ').</p>'
+        if narrator.startswith("ElevenLabs ") else ""
     )
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1455,6 +1471,7 @@ audio{{display:block;width:100%;margin:30px 0}}
 <a href="evidence.json">Newsroom source audit</a> ·
 <a href="health.html">Production quality dashboard</a> ·
 <a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
+{voice_credit}
 <h2>Sources</h2><ol>{links}</ol>
 <h2>Transcript</h2><p>{html.escape(transcript)}</p>
 <footer>AI-assisted briefing. Related publisher headlines are not independent fact verification. Follow linked original reporting.
@@ -1500,10 +1517,17 @@ def main():
     )
     mp3 = WORK / f"first-light-{day}.mp3"
     narrator = synthesize(script, mp3)
-    if narrator != "Gemini Charon":
-        raise RuntimeError(
-            "Unapproved narrator refused: only Gemini Charon may be published"
-        )
+    if narrator not in ("ElevenLabs Brian", "ElevenLabs Daniel", "Gemini Charon"):
+        raise RuntimeError("Unapproved narrator refused before publication")
+    if narrator.startswith("ElevenLabs "):
+        with notes.open("a", encoding="utf-8") as note_file:
+            note_file.write(
+                "\n\n### Narrator and license attribution\n"
+                "Narrator: " + narrator + "\n"
+                "Generated with ElevenLabs (https://elevenlabs.io). "
+                "The free-plan output is noncommercial and requires "
+                "attribution.\n"
+            )
     audio_stats = inspect_audio(mp3)
     edition["narrator"] = narrator
     edition["audio_quality"] = audio_stats
@@ -1586,7 +1610,10 @@ def main():
         }, indent=2),
         encoding="utf-8"
     )
-    (SITE / "index.html").write_text(web_page(day, sources, script), encoding="utf-8")
+    (SITE / "index.html").write_text(
+        web_page(day, sources, script, narrator=narrator),
+        encoding="utf-8",
+    )
     (SITE / ".nojekyll").write_text("", encoding="utf-8")
     LOG.info("Episode %s published to release, Pages files ready for %s", day, base)
 
