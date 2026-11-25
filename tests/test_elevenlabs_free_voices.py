@@ -57,7 +57,7 @@ class FreeVoiceComparisonTests(unittest.TestCase):
         self.assertEqual(result["plan"], "free")
         self.assertEqual(result["metadata_status"], "available")
         self.assertEqual(list(result["choices"]), ["daniel", "brian"])
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
         self.assertTrue(all(
             call[1]["headers"]["xi-api-key"] == "TEST_CREDENTIAL" and
             call[1]["allow_redirects"] is False
@@ -113,6 +113,83 @@ class FreeVoiceComparisonTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "required"):
             free.discover("")
 
+    def test_owned_voice_design_discovery_counts_without_identifying(self):
+        def get(url, **kwargs):
+            if url.endswith("/user/subscription"):
+                return answer({"tier": "free"})
+            if "voice_type=personal" in url:
+                return answer({"voices": [
+                    {"category": "generated", "voice_id": "PRIVATE_PERSONAL_ID",
+                     "sharing": None},
+                    {"category": "professional", "voice_id": "COMMUNITY_ID",
+                     "sharing": {"public_owner_id": "owner"}},
+                ]})
+            return answer({"voices": []})
+        result = free.discover("KEY", get=get, announce=False)
+        self.assertEqual(result["owned_voice_design_count"], 1)
+        self.assertEqual(result["choices"], {})
+
+    def test_custom_voice_must_be_personally_owned_and_generated(self):
+        selected = "A12B34C56D78E90F1234"
+        fake_run = Mock()
+        def get(url, **kwargs):
+            if url.endswith("/user/subscription"):
+                return answer({"tier": "free"})
+            if url.endswith("/voices/" + selected):
+                return answer({
+                    "voice_id": selected, "category": "professional",
+                    "sharing": {"public_owner_id": "other"},
+                })
+            return answer({"voices": []})
+        with patch.dict(os.environ, {
+            "ELEVENLABS_AUDITION_VOICE_ID": selected
+        }):
+            with self.assertRaisesRegex(RuntimeError, "no TTS request"):
+                free.audition_one(
+                    "custom", "KEY", get=get, run=fake_run,
+                )
+        fake_run.assert_not_called()
+
+    def test_owned_voice_design_may_be_auditioned_with_secret_override(self):
+        selected = "A12B34C56D78E90F1234"
+        fake_run = Mock()
+        def get(url, **kwargs):
+            if url.endswith("/user/subscription"):
+                return answer({"tier": "free"})
+            if url.endswith("/voices/" + selected):
+                return answer({
+                    "voice_id": selected, "category": "generated",
+                    "sharing": None,
+                })
+            if "voice_type=personal" in url:
+                return answer({"voices": [{
+                    "voice_id": selected, "category": "generated",
+                    "sharing": None,
+                }]})
+            return answer({"voices": []})
+        with patch.dict(os.environ, {
+            "ELEVENLABS_AUDITION_VOICE_ID": selected
+        }):
+            with patch.object(Path, "write_text") as write_text:
+                free.audition_one(
+                    "custom", "KEY", get=get, run=fake_run,
+                )
+        fake_run.assert_called_once_with(
+            voice_id_override=selected,
+        )
+        self.assertIn("Personal Voice Design", write_text.call_args.args[0])
+
+    def test_custom_secret_missing_does_not_generate(self):
+        with patch.dict(os.environ, {
+            "ELEVENLABS_AUDITION_VOICE_ID": ""
+        }):
+            fake_run = Mock()
+            with self.assertRaisesRegex(RuntimeError, "secret"):
+                free.audition_one("custom", "KEY",
+                                  get=lambda url, **kw: answer({"voices": []}),
+                                  run=fake_run)
+            fake_run.assert_not_called()
+
     def test_workflow_default_is_nonbillable_and_production_untouched(self):
         root = Path(__file__).resolve().parents[1]
         wf = (root / ".github/workflows/elevenlabs-free-voice-compare.yml"
@@ -124,7 +201,8 @@ class FreeVoiceComparisonTests(unittest.TestCase):
         self.assertNotIn("GEMINI_API_KEY", wf)
         self.assertNotIn("pages:", wf)
         self.assertNotIn("contents: write", wf)
-        self.assertNotIn("ELEVENLABS_VOICE_ID", wf)
+        self.assertNotIn("          ELEVENLABS_VOICE_ID:", wf)
+        self.assertIn("ELEVENLABS_AUDITION_VOICE_ID", wf)
 
 
 if __name__ == "__main__":
