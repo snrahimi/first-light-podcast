@@ -91,8 +91,8 @@ class NewsroomQualityUpgradeTests(unittest.TestCase):
                  "text": "The court released its written notice after a "
                          "public hearing with local officials on Tuesday."},
                 {"publisher": "Wire Two",
-                 "text": "The published document contained two separate "
-                         "proposed dates for later proceedings this month."},
+                 "text": "The published court document contained two separate "
+                         "proposed dates for later public proceedings this month."},
             ],
             "official_context": [],
         }]}
