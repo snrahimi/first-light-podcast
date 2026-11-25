@@ -235,9 +235,10 @@ def inspect_mp3(path):
     return round(duration, 1)
 
 
-def main():
+def main(voice_id_override=None):
+    """Use selected voice without changing the GitHub voice secret."""
     key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
-    voice = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
+    voice = voice_id_override or os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
     # Validate preconditions before making any billable request.
     audition_payload()
     if not key or not voice:
