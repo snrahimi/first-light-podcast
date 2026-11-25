@@ -1,0 +1,77 @@
+name: ElevenLabs Free Voice Comparison (Manual Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Find eligible voices without credit use, or generate one sample'
+        type: choice
+        required: true
+        default: discover_only
+        options:
+          - discover_only
+          - audition_one
+      candidate:
+        description: 'Only used in audition_one mode; availability is checked first'
+        type: choice
+        required: true
+        default: daniel
+        options:
+          - daniel
+          - brian
+          - chris
+          - alice
+          - custom
+
+permissions:
+  contents: read
+
+jobs:
+  voice-comparison:
+    name: Discover available defaults or audition one voice
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+
+    steps:
+      - name: Check out main source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependency
+        run: python -m pip install requests
+
+      - name: Install audio verifier for actual auditions only
+        if: ${{ inputs.mode == 'audition_one' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffprobe -version | head -n 1
+
+      - name: Run offline ElevenLabs safety tests
+        run: python -m unittest discover -s tests -p 'test_elevenlabs*.py' -v
+
+      - name: Discover free-account default voice candidates (GET only)
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: python -m src.elevenlabs_free_voices discover
+
+      - name: Audition the selected eligible default voice (one credit-using request)
+        if: ${{ inputs.mode == 'audition_one' }}
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_AUDITION_VOICE_ID: ${{ secrets.ELEVENLABS_AUDITION_VOICE_ID }}
+          CANDIDATE_ALIAS: ${{ inputs.candidate }}
+        run: python -m src.elevenlabs_free_voices audition "$CANDIDATE_ALIAS"
+
+      - name: Upload noncommercial audio comparison (no RSS, Pages or releases)
+        if: ${{ inputs.mode == 'audition_one' && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-light-elevenlabs-comparison-${{ inputs.candidate }}
+          path: voice-audition/
+          if-no-files-found: error
+          retention-days: 1

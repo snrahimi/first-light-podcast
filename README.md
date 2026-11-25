@@ -407,3 +407,54 @@ for distribution or monetization. To use ElevenLabs in the published
 First Light podcast, first verify the selected voice's commercial
 license and pay for the appropriate plan. A separate reviewed change
 would be required to replace Gemini Charon.
+
+
+## Compare free API-compatible ElevenLabs voices (manual, no production changes)
+
+Use [ElevenLabs Free Voice Comparison (Manual Only)](
+.github/workflows/elevenlabs-free-voice-compare.yml) on **main**.
+Select **discover_only** first. It uses authenticated GET metadata requests
+to find only your account's listed **Default** voices from a small First
+Light shortlist: Daniel (British male newsreader), Brian (warm male
+narrator), Chris (approachable male), and Alice (polished female). It also
+counts any personally generated **Voice Design** voices, without printing
+their private IDs or names. This mode uses **zero TTS generation credits**.
+
+**Important: Default voices are scheduled to disappear on December 31,
+2026 and are available only to accounts created before March 2026.**
+The Infinity replacements are **Voice Library** voices, not guaranteed
+free-API substitutes. ElevenLabs blocks Voice Library voices through
+the free-tier API, even when they are playable on its site. A listed
+Default voice is an eligibility hint, *not* proof that synthesis will work.
+
+If discovery lists an eligible classic voice, rerun with
+**mode = audition_one** and **candidate = daniel, brian, chris or alice**.
+The code checks the actual account's default-voice list before sending
+a single bounded **737-character** Flash v2.5 synthesis request. One
+run samples one voice only, and the MP3 is uploaded as a short-lived
+GitHub Actions artifact, **never** to the podcast feed or public site.
+Multiple auditions consume more credits. Unavailable/paid/community
+voices are blocked before a synthesis request when the metadata
+identifies them.
+
+**More durable free-plan alternative:** ElevenLabs offers three free
+Voice Design slots for creating personally owned generated voices.
+Create one in ElevenLabs under **Voices → My Voices → Add a new voice →
+Voice Design** (the preview consumes credits). To test that voice in
+this repository without overwriting your existing
+`ELEVENLABS_VOICE_ID`, save its ID as a *separate* GitHub Actions secret
+`ELEVENLABS_AUDITION_VOICE_ID`. Then select **audition_one** and
+**candidate = custom**. This path requires read-only API confirmation
+that the voice belongs to your account and was generated with Voice
+Design, not borrowed from the Voice Library.
+
+Both types of auditions use the same short original script and
+`eleven_flash_v2_5` synthesis settings for a fair listening comparison.
+Do not use ElevenLabs Free outputs for commercial podcast distribution.
+Free samples require attribution; artifacts are retained one day and
+may be downloaded by people with repository read access. Gemini Charon
+remains the **only** production voice. No automatic substitution occurs.
+
+Reference: [Default voice retirement](https://elevenlabs.io/docs/help-center/product/voices/my-voices/what-are-default-voices),
+[Voice Library access](https://elevenlabs.io/docs/eleven-creative/voices/voice-library),
+[Voice Design](https://elevenlabs.io/docs/eleven-creative/voices/voice-design).
