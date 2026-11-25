@@ -544,7 +544,7 @@ def fallback_readout(now, edition, weather, dossiers=None):
         f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}.",
         "This is First Light: World Report, with international developments, "
         "business, science, technology and local weather. "
-        "This AI-assisted briefing attributes reporting to its publishers "
+        "This briefing is produced with artificial intelligence assistance, attributing reporting to its publishers "
         "and issuing agencies. Source links and corrections are in the show notes.",
     ]
     priority_weather = early_weather_alert_intro(weather)
