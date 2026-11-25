@@ -283,6 +283,46 @@ def _historical_status(cluster, history):
     return ("repeat" if similarity >= 0.86 else "related_update_unverified"), previous
 
 
+
+def _story_explainer_support(cluster):
+    """Small, auditable bonus for real, *complete* sourced descriptions.
+
+    Completeness is a narration-readiness signal, NOT verification.
+    A cut-off RSS snippet or a headline repeated as its own summary
+    provides no extra context. Urgent but sparsely sourced stories can
+    still outrank a well-described low-impact story.
+    """
+    snippets = set()
+    for report in cluster.get("reports", []):
+        summary = re.sub(r"\s+", " ", str(report.get("summary") or "")).strip()
+        title = re.sub(r"\s+", " ", str(report.get("title") or "")).strip()
+        if len(summary.split()) < 14 or len(summary) > 1600:
+            continue
+        # Require at least one complete declarative sentence. A snippet
+        # cut off mid-thought does not count as a reliable explainer.
+        full = re.search(r"[.!?](?=\s|$)", summary)
+        if not full:
+            continue
+        candidate = summary[:full.end()].strip().lower()
+        if len(candidate.split()) < 12 or candidate.rstrip(".!?") == title.lower().rstrip(".!?"):
+            continue
+        snippets.add(candidate)
+    source_count = len({str(r.get("publisher", "")).strip()
+                        for r in cluster.get("reports", [])
+                        if r.get("publisher")})
+    count = min(3, len(snippets))
+    # Maximum six points, compared with existing 45-point world base and
+    # 18-point freshness component; descriptive quantity cannot dominate.
+    bonus = min(6, count * 2)
+    return {
+        "complete_distinct_summaries": count,
+        "publisher_feeds": source_count,
+        "bonus": bonus,
+        "independently_verified": False,
+        "interpretation": "narration readiness, not factual verification",
+    }
+
+
 def _rank(cluster, history):
     published = cluster["lead"]
     age = min(max(float(published.get("age", 42)), 0), 42)
@@ -324,6 +364,9 @@ def _rank(cluster, history):
         "independently_verified": False,
     }
     score += depth
+    readiness = _story_explainer_support(cluster)
+    cluster["explainer_support"] = readiness
+    score += readiness["bonus"]
     score += 5 if cluster["region"] != "other" else 0
     if status == "repeat":
         score -= 50
@@ -369,7 +412,10 @@ def curate(groups, history, now):
                         key_tokens(p["lead"]["title"]))
                     for p in peers
                 ), default=0)
-                penalty = (10 if same_region else 0) + (8 if overlap >= 3 else 0)
+                # A second report on substantially the same development
+                # needs a stronger editorial reason than mere recency.
+                redundancy = 14 if overlap >= 4 else 8 if overlap >= 3 else 0
+                penalty = (10 if same_region else 0) + redundancy
                 if prefer_new_region and c["region"] in used_regions:
                     penalty += 7
                 if c["category"] == "world" and peers:
@@ -446,6 +492,7 @@ def curate(groups, history, now):
                 ),
                 "score": item["score"],
                 "evidence_depth": item["evidence_depth"],
+                "explainer_support": item["explainer_support"],
                 "region": item["region"],
             }
             for item in matches
@@ -463,6 +510,11 @@ def curate(groups, history, now):
         }),
         "history_items_consulted": len(history),
         "repeated_topics_avoided": sum(c["status"] == "repeat" for c in clusters),
+        "lead_explainer_ready": sum(
+            bool(c["explainer_support"]["complete_distinct_summaries"])
+            for c in lead
+        ),
+        "lead_story_count": len(lead),
     }
 
 
