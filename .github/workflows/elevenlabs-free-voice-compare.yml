@@ -21,6 +21,7 @@ on:
           - brian
           - chris
           - alice
+          - custom
 
 permissions:
   contents: read
@@ -62,6 +63,7 @@ jobs:
         if: ${{ inputs.mode == 'audition_one' }}
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_AUDITION_VOICE_ID: ${{ secrets.ELEVENLABS_AUDITION_VOICE_ID }}
           CANDIDATE_ALIAS: ${{ inputs.candidate }}
         run: python -m src.elevenlabs_free_voices audition "$CANDIDATE_ALIAS"
 
