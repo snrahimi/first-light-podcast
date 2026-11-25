@@ -21,7 +21,7 @@ from pathlib import Path
 import requests
 
 LOG = logging.getLogger("firstlight.broadcast32")
-SPEECH_RATE_WPM = 163  # Measured Charon: 657 words / 241.9s in Nov 2026.
+SPEECH_RATE_WPM = 153  # Planning estimate from Brian's 115-word / 45.0s audition.
 TARGET_MIN_SECONDS = 300
 TARGET_MAX_SECONDS = 420
 WORD_TARGET = 925
@@ -32,7 +32,7 @@ def estimate_duration(words, wpm=SPEECH_RATE_WPM):
 
 
 def duration_preflight(words, *, wpm=SPEECH_RATE_WPM):
-    """Measured-Charon-based forecast, NOT a substitute for ffprobe.
+    """Brian-based planning estimate, NOT a substitute for ffprobe.
 
     Under-target episodes remain publishable if sources cannot support the
     missing words. Never encourage length padding, speed distortion or
@@ -51,7 +51,9 @@ def duration_preflight(words, *, wpm=SPEECH_RATE_WPM):
         "overflow_seconds": max(0, seconds - TARGET_MAX_SECONDS),
         "minimum_target_words": min_words,
         "maximum_target_words": max_words,
-        "observed_charon_wpm": wpm,
+        "planning_voice": "ElevenLabs Brian",
+        "planning_wpm": wpm,
+        "observed_charon_wpm": 163,  # Historical metadata compatibility.
         "status": ("estimated_in_target" if TARGET_MIN_SECONDS <= seconds <= TARGET_MAX_SECONDS
                    else "estimated_short" if seconds < TARGET_MIN_SECONDS
                    else "estimated_long"),
