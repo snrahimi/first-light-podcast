@@ -40,8 +40,8 @@ class Broadcast32Tests(unittest.TestCase):
         result = broadcast32.duration_preflight(529)
         self.assertFalse(result["estimated_in_target"])
         self.assertEqual(result["status"], "estimated_short")
-        self.assertEqual(result["minimum_target_words"], 815)
-        self.assertEqual(result["shortfall_words"], 286)
+        self.assertEqual(result["minimum_target_words"], 765)
+        self.assertEqual(result["shortfall_words"], 236)
         self.assertGreater(result["shortfall_seconds"], 90)
         self.assertTrue(broadcast32.duration_preflight(925)[
             "estimated_in_target"])
@@ -77,8 +77,8 @@ class Broadcast32Tests(unittest.TestCase):
         self.assertIn("strict source boundaries".upper(), prompt)
         self.assertIn("Do not repeat the same fact", prompt)
 
-    def test_charon_measured_speech_rate(self):
-        self.assertEqual(broadcast32.estimate_duration(657), 242)
+    def test_brian_measured_planning_speech_rate(self):
+        self.assertEqual(broadcast32.estimate_duration(657), 258)
         self.assertTrue(300 <= broadcast32.estimate_duration(925) <= 420)
 
     def test_topic_partition_and_two_only_model_calls(self):

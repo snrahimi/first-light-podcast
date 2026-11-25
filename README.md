@@ -572,3 +572,67 @@ Future daily broadcasts automatically use the new web transcript
 renderer and the improved original storytelling prompts. Scripts still
 depend on available RSS/official-source evidence: an AI-generated
 script is not independently fact-checked simply because it sounds polished.
+
+
+## Editorial Quality 3.1: selection, depth and Brian delivery (November 2026)
+
+First Light aims to be an original, engaging *single-host* news briefing.
+The highest-priority world stories should be important and well explained,
+not just catchy headlines. No material from another broadcaster's
+transcripts is included in production scripts or prompts.
+
+### More discriminating story selection
+
+- Historical-repeat suppression, significance, source variety and geographic
+  diversity remain the primary factors in the story rundown.
+- A new capped **0–6 point explainer-readiness bonus** rewards complete,
+  distinct RSS reporting rather than raw headline length.
+  Incomplete/abruptly clipped summaries do not receive this additional
+  bonus. A major breaking development can still make the lead slot when
+  reporting is sparse.
+- The selector applies a stronger soft penalty against assigning
+  two near-identical world headlines to the lead slots.
+- Story metadata records its complete-summary count separately from
+  source-publisher counts. Multiple similar publisher headlines are
+  **not** treated as independent verification.
+
+### More disciplined story depth
+
+- Story plans label **supported explainer** versus **brief only**.
+  Sparse world leads get a shorter advisory word budget rather than an
+  invitation to invent background or consequences. Complete attributed
+  evidence and actual official documents can support longer reporting.
+- New advisory, non-gating presentation diagnostics track formulaic
+  attribution, detectable section cues, and leads with limited context.
+  A style score is not a substitute for accuracy checks. The review
+  appears in the public latest.json metadata, alongside the existing
+  quality and evidence audits.
+- The Gemini writer still produces **two bounded sections** and is subject
+  to the same numeric evidence checks. No additional model calls.
+
+### More natural, cost-aware Brian delivery
+
+- Duration planning now uses **approximately 153 words/minute**, based on
+  Brian's measured 115-word/45-second audition, not Charon's historical
+  163 WPM. Full episode timing remains governed by actual MP3 inspection.
+- Brian uses slightly less rigid voice stability (**0.58**), similarity
+  **0.78**, style **0**, and neutral speed **1.0**. Daniel keeps a steadier
+  **0.64** stability profile as backup. These are proposed presets,
+  not yet proven better by a listening comparison.
+- Very short **Flash v2.5-compatible SSML pauses** are inserted at a few
+  existing story-section boundaries. They are restricted to known
+  transitions and remain absent from the public/plain transcript.
+  No new facts, spoken words, music or fictional interview cues.
+- The code counts **all SSML markup characters** in the conservative
+  credit/character preflight. No extra TTS requests; existing Brian to
+  Daniel quota safeguards and fail-closed behavior remain.
+
+Offline tests check source fidelity, caps, timing estimates, no TTS
+calls during tests, and that removing inserted pauses yields the
+original spoken script. After deployment, evaluate one normally
+scheduled broadcast for pacing, proper-noun pronunciation, story depth
+and attribution before tuning further. Both voices are subject to
+December 31, 2026 retirement and current plan limits.
+
+References: [ElevenLabs pause guidance](https://elevenlabs.io/docs/help-center/product/core-capabilities/text-to-speech/how-can-i-add-pauses),
+[voice speed settings](https://elevenlabs.io/docs/help-center/product/core-capabilities/text-to-speech/can-i-change-the-pace-of-the-voice).

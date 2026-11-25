@@ -819,6 +819,9 @@ def news_and_script(_client, now, weather):
     quality["expected_target_seconds"] = [300, 420]
     quality["duration_preflight"] = broadcast32.duration_preflight(len(script.split()))
     quality["draft"] = draft_stats
+    quality["presentation_review"] = broadcast32.presentation_review(
+        script, edition
+    )
     if not quality["duration_preflight"]["estimated_in_target"]:
         LOG.warning(
             "Pre-narration duration estimate %ds is short of 5 minutes by %ds "
@@ -1637,6 +1640,9 @@ def main():
                 "preflight_shortfall_seconds": edition["script_quality"]["duration_preflight"]["shortfall_seconds"],
                 "preflight_shortfall_words": edition["script_quality"]["duration_preflight"]["shortfall_words"],
                 "quality_scorecard": edition["quality_scorecard"],
+                "presentation_review": edition["script_quality"]["presentation_review"],
+                "lead_explainer_ready": edition["lead_explainer_ready"],
+                "lead_story_count": edition["lead_story_count"],
                 "evidence_audit_url": base + "/evidence.json",
                 "discovery_links_used_as_facts": False,
             },

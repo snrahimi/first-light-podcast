@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -35,6 +36,68 @@ MIN_RAW_AUDIO_BYTES = 60_000
 # Flash may cost 0.5-1 credit per character, plan dependent. Use the
 # *higher* estimate for preflight rather than assuming any discount.
 MAX_EPISODE_CREDIT_BUDGET = 8000
+
+# Conservative per-request delivery presets. Compared with the working
+# auditions, Brian gets slightly more dynamic phrasing. Speed stays neutral;
+# changing it further requires a reviewed listening test.
+VOICE_SETTINGS = {
+    "Brian": {
+        "stability": 0.58,
+        "similarity_boost": 0.78,
+        "style": 0.0,
+        "speed": 1.0,
+        "use_speaker_boost": True,
+    },
+    "Daniel": {
+        "stability": 0.64,
+        "similarity_boost": 0.78,
+        "style": 0.0,
+        "speed": 1.0,
+        "use_speaker_boost": True,
+    },
+}
+
+# Flash v2.5 supports short SSML break tags. Put them only at producer-
+# generated section transitions; never inject sound effects, fake voices,
+# interview cues, or stage directions into the transcript.
+DELIVERY_PAUSES = (
+    ("We begin with the leading world developments.", "0.4"),
+    ("Elsewhere around the world.", "0.4"),
+    ("Now, business and markets.", "0.5"),
+    ("And in technology and cybersecurity.", "0.35"),
+    ("Now let's turn to business, science and technology.", "0.5"),
+    ("And now, a look at the weather in San Antonio.", "0.65"),
+    ("For developments and corrections, consult", "0.45"),
+    ("That is First Light: World Report.", "0.45"),
+    ("That's First Light: World Report.", "0.45"),
+)
+
+
+def delivery_text(spoken_script):
+    """Add restrained prosodic pauses without changing any spoken words.
+
+    Reversing the inserted tags and collapsing whitespace must produce
+    the exact approved transcript text. All tags count toward API budget.
+    """
+    if not isinstance(spoken_script, str):
+        raise NarratorFailure("narration script is not text")
+    # Script is source-gated already; still reject user/source-supplied markup
+    # that might be interpreted as instructions by the voice engine.
+    if re.search(r"<\s*/?\s*break\b", spoken_script, re.I):
+        raise NarratorFailure("untrusted speech markup in narration script")
+    result = spoken_script
+    for marker, seconds in DELIVERY_PAUSES:
+        boundary = re.compile(
+            r"(?<=[.!?])\s+(?=" + re.escape(marker) + r")",
+            flags=re.I,
+        )
+        result = boundary.sub(
+            lambda match: f' <break time="{seconds}s" /> ',
+            result, count=1,
+        )
+    if len(result) > MAX_SCRIPT_CHARS:
+        raise NarratorFailure("prepared narration exceeds TTS character cap")
+    return result
 
 
 class NarratorFailure(RuntimeError):
@@ -103,10 +166,7 @@ def _speak(script, name, voice_id, key, *, post=requests.post):
             json={
                 "text": script,
                 "model_id": MODEL,
-                "voice_settings": {
-                    "stability": 0.62,
-                    "similarity_boost": 0.78,
-                },
+                "voice_settings": dict(VOICE_SETTINGS[name]),
             },
             timeout=(12, 240),
             allow_redirects=False,
@@ -196,6 +256,7 @@ def synthesize(script, destination, *, get=requests.get,
         raise NarratorFailure("narration script is empty")
     if len(script) > MAX_SCRIPT_CHARS:
         raise NarratorFailure("script exceeds 8000-character TTS cap")
+    spoken = delivery_text(script)
     output = Path(destination)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.unlink(missing_ok=True)
@@ -207,8 +268,8 @@ def synthesize(script, destination, *, get=requests.get,
             raw.unlink(missing_ok=True)
             converted.unlink(missing_ok=True)
             try:
-                _credit_preflight(key, len(script), get=get)
-                raw.write_bytes(_speak(script, name, vid, key, post=post))
+                _credit_preflight(key, len(spoken), get=get)
+                raw.write_bytes(_speak(spoken, name, vid, key, post=post))
                 verify(raw)
                 subprocess.run([
                     "ffmpeg", "-nostdin", "-y", "-hide_banner",
