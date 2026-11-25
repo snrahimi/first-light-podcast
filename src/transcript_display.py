@@ -81,7 +81,7 @@ def _paragraphs(text):
         starts_story = bool(NEW_REPORT.match(sentence))
         if buffer and (words + count > PARAGRAPH_WORD_TARGET
                        or len(buffer) >= PARAGRAPH_SENTENCE_LIMIT
-                       or (starts_story and words >= 16)):
+                       or (starts_story and words >= 8)):
             output.append(" ".join(buffer))
             buffer, words = [], 0
         buffer.append(sentence)
