@@ -274,6 +274,7 @@ class PodcastTests(unittest.TestCase):
 
     def test_charon_failure_never_uses_adam_or_piper(self):
         with tempfile.TemporaryDirectory() as temp, \
+             patch.dict(os.environ, {"FIRST_LIGHT_NARRATOR": "charon"}), \
              patch("src.first_light.WORK", Path(temp)), \
              patch("src.first_light._tts_gemini",
                    side_effect=RuntimeError("HTTP 429")), \

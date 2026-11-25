@@ -23,10 +23,12 @@ scheduled services are available.
   diversity, potential significance, geographic diversity and novelty.
 - Use a radio-style script outline: informative opening, two explained lead
   stories, quick briefs, actionable local weather, and what to watch.
-- Narrate **only** with the approved **Gemini 3.8 Flash TTS Charon** voice.
-  The daily workflow never substitutes Kokoro Adam or Piper. If Charon is
-  unavailable, publication fails before release or Pages replacement, so
-  the previously published episode remains untouched.
+- Narrate with **ElevenLabs Brian as primary and Daniel as backup**, using
+  the same Flash v2.5 model and complete-script single-call synthesis.
+  Quota, billing and authentication failures **do not** trigger Daniel,
+  and failed or incomplete audio cannot replace a published episode.
+  Gemini Charon is available only through an explicit repository variable
+  opt-out, not as an automatic third voice.
 - Apply safe abbreviation expansions to improve pronunciation without
   inventing pronunciations of international names.
 - Normalize and encode MP3 at **192 kbps**. The automated checks reject
@@ -82,20 +84,28 @@ Do not distribute unlicensed publisher text or copyrighted podcast audio.
   feeds, stored as headline metadata and links.
 - **AI script:** Optional Gemini key (default gemini-3.5-flash-lite with a
   free-tier model alternative). A source-attributed template is the backup.
-- **AI voice:** Gemini 3.8 Flash TTS Charon is mandatory for publication.
-  Kokoro Adam and Piper are not used automatically. Speech generation is
-  paced between chunks, with at most two retries on transient network
-  errors or HTTP 429/5xx. Provider daily quotas may still prevent an episode.
+- **AI voice:** Brian (ElevenLabs Default voice) is the production primary,
+  and Daniel is the single backup for eligible voice/transient errors.
+  No automatic Gemini, Kokoro, or Piper fallback. Provider plan limits
+  and monthly credits may still prevent a new episode.
 - **Weather:** Open-Meteo / National Weather Service.
 - **Hosting:** GitHub Releases MP3 archives and GitHub Pages podcast site.
 - **Schedule:** 3:30 AM America/Chicago; target listen time 5 AM.
 
-**Costs:** No OpenAI or ElevenLabs APIs are called by the active daily workflow.
-The Gemini API **may incur charges** if your Google project has paid billing
-enabled. Confirm that your project/model combination really has free-tier
-access and sufficient limits. Free quotas and pricing can change. There is no
-application-level hard-dollar spend cutoff. GitHub public-repository runner
-availability and API quotas also remain subject to provider policies.
+**Costs:** The active daily workflow now calls ElevenLabs text-to-speech
+using the existing `ELEVENLABS_API_KEY` secret. Every successful narration
+uses credits, typically 0.5–1 credit per input character depending on
+account/model pricing. On the free plan, **10,000 credits per month is not
+enough for a 5–7 minute episode every day**. When the checked credit
+allowance cannot cover a full episode at a conservative one-credit-per-
+character budget, the workflow stops before TTS. Brian→Daniel backup
+does not fix an exhausted account. The production code also caps each
+episode at 8,000 characters and at most one API call per approved voice.
+No automatic purchase, plan upgrade or rollover-spending approval occurs
+in the application. A provider account with Pay As You Go enabled may
+have separate billing rules; review them in ElevenLabs directly.
+The Gemini writer may incur charges if its project uses paid billing.
+GitHub runner availability, provider quotas and scheduling are best effort.
 
 ## One-time setup
 
@@ -144,8 +154,35 @@ GitHub Release publication and Pages artifact deployment.
 
 ## Narrator choice and failure behavior
 
+**Current selection (November 25, 2026): ElevenLabs Brian first, Daniel
+second.** Both classic Default voices were successfully auditioned on
+this account. Production verifies remaining ElevenLabs plan allowance
+before each synthesis call, generates the **entire script** with a
+single voice, checks MP3 validity/duration, normalizes to 192 kbps,
+and records the actual narrator in the feed site's metadata.
+Only voice-specific/transient failures permit one Daniel attempt.
+Account-wide 401/402/403/429 failures, quota exhaustion, and missing
+credentials never attempt a second chargeable voice.
+
+These voices are retiring on **December 31, 2026**. Plan and voice
+replacement must be chosen ahead of that date. Free-plan generated
+audio is strictly **noncommercial with ElevenLabs attribution**:
+the podcast homepage, RSS item and GitHub Release notes must show
+the attribution when an ElevenLabs episode is produced.
+Commercial use requires an eligible paid plan. Do not assume that
+the free tier is adequate for the daily publishing schedule.
+
+If either voice fails, or credits run out, the job preserves the
+previous published episode. It does not automatically return to Charon.
+For an intentional temporary return to Gemini Charon, set GitHub
+Actions **repository variable** `FIRST_LIGHT_NARRATOR=charon`
+(not a secret). Remove/set `elevenlabs` to restore Brian→Daniel.
+Neither change affects the source-based Gemini scriptwriter.
+
+### Historical Charon reliability notes (before November 25, 2026)
+
 The listener rejected Kokoro Adam after the first Newsroom 3.0 production run.
-**Charon is now required.** A partially produced Gemini audio file is never
+**Charon was previously required.** A partially produced Gemini audio file is never
 used as a complete episode; remaining sections must finish. Transient HTTP
 429/5xx and connection errors receive bounded retries. HTTP status and
 segment number are logged without raw API response bodies or secrets. If any
@@ -296,9 +333,9 @@ Package 2+ adds:
   request template, and versioned backup audio/transcript/audit/notes on
   same-date regeneration. A failed archive blocks replacement.
 
-The daily producer remains on the free-data path and only Gemini Charon
-may narrate. New writing requests are bounded, not unlimited. No paid
-provider, extra voice or broad web scraper has been enabled.
+This historical milestone used Gemini Charon and no ElevenLabs narrator.
+Since the November 25, 2026 production update, Brian and Daniel are the
+approved narrator order. News writing requests remain bounded.
 
 **Important:** Phase 2+ code and offline tests do not prove that the
 next live broadcast will reach five minutes or be independently fact
@@ -327,8 +364,9 @@ Google's public pricing page lists `gemini-3.1-flash-lite` as a Free Tier
 candidate for scriptwriting. **It is not enabled as automatic failover**:
 availability, daily quotas, project billing and data-use terms must be checked
 for the actual Google project and approved by the owner. Gemini Charon remains
-the only approved narrator, and a shorter accurately attributed episode may
-still publish when the supplied sources are too thin.
+the previously approved narrator at that milestone. Brian and Daniel
+are the current narrator preference; a shorter accurately attributed episode
+may still publish when the supplied sources are too thin.
 
 See [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing)
 and [rate-limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits).
@@ -458,3 +496,28 @@ remains the **only** production voice. No automatic substitution occurs.
 Reference: [Default voice retirement](https://elevenlabs.io/docs/help-center/product/voices/my-voices/what-are-default-voices),
 [Voice Library access](https://elevenlabs.io/docs/eleven-creative/voices/voice-library),
 [Voice Design](https://elevenlabs.io/docs/eleven-creative/voices/voice-design).
+
+
+## ElevenLabs narrator configuration (November 25, 2026)
+
+- **Primary:** Brian, classic Default ID `nPczCjzI2devNBz1zQrb`.
+- **Backup:** Daniel, classic Default ID `onwK4e9ZLuTAKqWW03F9`.
+- **Model:** `eleven_flash_v2_5`.
+- **Credentials:** GitHub Actions secret `ELEVENLABS_API_KEY` already
+  exists. Existing `ELEVENLABS_VOICE_ID` remains unchanged and is **not**
+  used by the production pipeline; its Voice Library restrictions do not
+  affect Brian and Daniel.
+- **Optional setting:** repository variable `FIRST_LIGHT_NARRATOR` uses
+  `elevenlabs` by default, or `charon` for an explicit switch back.
+- **Publication:** Full-episode verification before any release or Pages
+  update. Only the selected narrator is recorded, with free-plan attribution.
+- **Quota:** Free 10,000 credit monthly cap will not support daily 5–7
+  minute shows. This is a functional pilot, not a financially sustainable
+  full-month rollout. We will need sufficient ElevenLabs capacity or an
+  explicitly selected alternate narrator/plan. Neither is purchased
+  automatically.
+- **Retirement:** Both classic voices end December 31, 2026. Plan a
+  permitted replacement before then.
+
+[ElevenLabs free-plan licensing](https://elevenlabs.io/docs/overview/administration/billing)
+· [Default voice retirement](https://elevenlabs.io/docs/help-center/product/voices/my-voices/what-are-default-voices)
