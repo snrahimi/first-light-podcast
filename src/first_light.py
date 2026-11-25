@@ -27,7 +27,7 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production, transcript_display
 else:
     import editorial
     import newsroom3
@@ -36,6 +36,7 @@ else:
     import quality2plus
     import monitor2plus
     import elevenlabs_production
+    import transcript_display
 import base64
 import io
 import wave
@@ -1459,6 +1460,7 @@ body{{background:#0a1729;color:#edf2f8;font:18px/1.65 system-ui,sans-serif;
 max-width:770px;margin:40px auto;padding:0 20px}}a{{color:#ffc18b}}
 h1{{font-size:clamp(2rem,7vw,3.6rem);line-height:1.12}}img{{width:165px;border-radius:18px}}
 audio{{display:block;width:100%;margin:30px 0}}
+{transcript_display.TRANSCRIPT_CSS}
 .subtitle{{color:#b7c6d7}}footer{{font-size:14px;color:#b7c6d7;margin:50px 0}}
 </style></head><body>
 <img src="cover.png" alt="First Light cover artwork">
@@ -1473,7 +1475,8 @@ audio{{display:block;width:100%;margin:30px 0}}
 <a href="https://github.com/snrahimi/first-light-podcast/issues/new/choose">Suggest a correction</a></p>
 {voice_credit}
 <h2>Sources</h2><ol>{links}</ol>
-<h2>Transcript</h2><p>{html.escape(transcript)}</p>
+<h2 id="transcript">Transcript</h2>
+{transcript_display.render_transcript(transcript)}
 <footer>AI-assisted briefing. Related publisher headlines are not independent fact verification. Follow linked original reporting.
 Keep a separate wake-up alarm: publication and iPhone automation are best effort.</footer>
 </body></html>"""
