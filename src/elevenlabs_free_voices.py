@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import sys
 
 import requests
@@ -47,6 +48,10 @@ DEFAULT_VOICE_URL = (
     "voice_type=default&page_size=100"
 )
 SUBSCRIPTION_URL = "https://api.elevenlabs.io/v1/user/subscription"
+PERSONAL_VOICE_URL = (
+    "https://api.elevenlabs.io/v2/voices?"
+    "voice_type=personal&page_size=100"
+)
 
 
 def discover(api_key, *, get=requests.get, announce=True):
@@ -89,10 +94,21 @@ def discover(api_key, *, get=requests.get, announce=True):
                 continue
             usable[alias] = info
 
+    personal_catalog = audition._read_only_metadata(
+        PERSONAL_VOICE_URL, api_key, get=get,
+    )
+    personal_rows = personal_catalog.get("voices")
+    personal_generated = [
+        voice for voice in personal_rows
+        if isinstance(voice, dict)
+        and voice.get("category") == "generated"
+        and not isinstance(voice.get("sharing"), dict)
+    ] if isinstance(personal_rows, list) else []
     result = {
         "plan": plan,
         "metadata_status": metadata_status,
         "choices": usable,
+        "owned_voice_design_count": len(personal_generated),
     }
     if announce:
         print(
@@ -105,6 +121,11 @@ def discover(api_key, *, get=requests.get, announce=True):
                 "Candidate: " + alias + " (" + info["name"]
                 + "): " + info["style"]
             )
+        print(
+            "Personal Voice Design voices found="
+            + str(len(personal_generated))
+            + " (no personal voice names or IDs logged)."
+        )
         if metadata_status == "unavailable":
             print(
                 "Default voice listing unavailable with this API key. "
@@ -127,20 +148,56 @@ def discover(api_key, *, get=requests.get, announce=True):
 
 
 def audition_one(alias, api_key, *, get=requests.get, run=None):
-    """Synthesize a single selected candidate only after default listing.
+    """Synthesize one user-approved candidate after credit-free preflight.
 
-    Tests inject 'run' to assert no paid request occurs if absent.
+    Community/library voice IDs are never substituted for these aliases.
+    A personal Voice Design voice requires a separate optional secret and
+    ownership confirmation with read-only API requests.
     """
-    if alias not in SHORTLIST:
+    if alias not in SHORTLIST and alias != "custom":
         raise ValueError("Unsupported free-voice shortlist choice")
     found = discover(api_key, get=get, announce=True)
-    if alias not in found["choices"]:
-        raise RuntimeError(
-            "Selected classic Default voice is not confirmed for this "
-            "account; no TTS API request made. Run discover_only, "
-            "or try a personal Voice Design voice instead."
+    if alias == "custom":
+        custom_id = os.environ.get("ELEVENLABS_AUDITION_VOICE_ID", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}", custom_id):
+            raise RuntimeError(
+                "Set optional ELEVENLABS_AUDITION_VOICE_ID GitHub secret "
+                "to a personally created Voice Design voice ID first; "
+                "no audio request made."
+            )
+        custom = audition._read_only_metadata(
+            "https://api.elevenlabs.io/v1/voices/" + custom_id,
+            api_key, get=get,
         )
-    candidate = found["choices"][alias]
+        owned = audition._read_only_metadata(
+            PERSONAL_VOICE_URL, api_key, get=get,
+        )
+        owned_rows = owned.get("voices")
+        belongs_to_user = (
+            isinstance(owned_rows, list)
+            and any(isinstance(v, dict) and v.get("voice_id") == custom_id
+                    and v.get("category") == "generated"
+                    and not isinstance(v.get("sharing"), dict)
+                    for v in owned_rows)
+        )
+        if (custom.get("voice_id") != custom_id
+                or custom.get("category") != "generated"
+                or isinstance(custom.get("sharing"), dict)
+                or not belongs_to_user):
+            raise RuntimeError(
+                "Selected audition voice not confirmed as personally "
+                "created Voice Design voice. Community voices are blocked "
+                "on the free API; no TTS request made."
+            )
+        candidate = {"id": custom_id, "name": "Personal Voice Design"}
+    else:
+        if alias not in found["choices"]:
+            raise RuntimeError(
+                "Selected classic Default voice is not confirmed for this "
+                "account; no TTS API request made. Run discover_only, "
+                "or try a personal Voice Design voice instead."
+            )
+        candidate = found["choices"][alias]
     synthesizer = run or audition.main
     synthesizer(voice_id_override=candidate["id"])
     output = Path("voice-audition")
@@ -167,7 +224,7 @@ def main(argv=None):
     else:
         raise SystemExit(
             "Usage: python -m src.elevenlabs_free_voices discover "
-            "| audition [daniel|brian|chris|alice]"
+            "| audition [daniel|brian|chris|alice|custom]"
         )
 
 
