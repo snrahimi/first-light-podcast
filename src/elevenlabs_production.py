@@ -85,7 +85,7 @@ def delivery_text(spoken_script):
     # that might be interpreted as instructions by the voice engine.
     if re.search(r"<\s*/?\s*break\b", spoken_script, re.I):
         raise NarratorFailure("untrusted speech markup in narration script")
-    result = spoken_script.strip()
+    result = spoken_script
     for marker, seconds in DELIVERY_PAUSES:
         boundary = re.compile(
             r"(?<=[.!?])\s+(?=" + re.escape(marker) + r")",
