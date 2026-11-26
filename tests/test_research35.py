@@ -5,9 +5,13 @@ No network, TTS credits, publishing, or audio generation.
 from datetime import datetime
 from types import SimpleNamespace
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from src import editorial, newsroom3, research33, research35, broadcast32
+from src import first_light_research35_preview as preview
 from tests_support import editorial_groups
 from tests.test_research33 import nasa_dossier, html_response, DOCUMENT
 
@@ -256,6 +260,63 @@ class ScopedNumberTests(unittest.TestCase):
         self.assertEqual(report["reason"], "world_numeric_evidence_gate")
         self.assertEqual(report["provider_calls"], 1)
         self.assertEqual(len(calls), 1)
+
+
+
+class UnpublishedResearchPreviewTests(unittest.TestCase):
+    def test_source_only_preview_never_uses_speech_or_publication(self):
+        edition = {
+            "script_mode": "source-attributed RSS fallback",
+            "count": 2,
+            "rundown": {"Top world headlines": [{}, {}]},
+            "newsroom3_audit": {"attributed_claims": 4},
+            "script_quality": {
+                "draft": {"provider_calls": 0, "reason": "source_only"},
+                "newsroom33": {"cold_open": {
+                    "mode": "unavailable_source_fallback",
+                    "preview_words": 0,
+                }},
+                "research_desk35": {
+                    "event_links": {
+                        "trusted_candidates_examined": 5,
+                        "same_event_candidates": 1,
+                        "added_source_reports": 1,
+                    },
+                    "official_source_retrieval": {
+                        "eligible_urls": 1, "attempted": 1,
+                        "unavailable_or_rejected": 0,
+                        "skipped_within_caps": 0,
+                        "accepted_documents": 1,
+                    },
+                },
+                "estimated_duration_seconds": 180,
+                "duration_preflight": {"estimated_in_target": False},
+            },
+        }
+        script = (
+            "Good morning, San Antonio. This is First Light: World Report. "
+            "BBC World reports an ongoing development. Now, the local weather."
+        )
+        with tempfile.TemporaryDirectory() as d, patch.object(
+            preview.first_light, "fetch_weather",
+            return_value={"source": "unavailable"}
+        ), patch.object(
+            preview.first_light, "news_and_script",
+            return_value=("Attribution notes", [
+                {"title": "Example report", "url": "https://www.bbc.com/news/example"}
+            ], script, edition)
+        ), patch.object(preview.first_light, "synthesize") as tts, \
+                patch.object(preview.first_light, "publish_release") as pub:
+            result = preview.run(now=NOW, output=Path(d))
+            tts.assert_not_called()
+            pub.assert_not_called()
+            self.assertFalse(result["audio_generated"])
+            self.assertFalse(result["publication_performed"])
+            self.assertEqual(result["elevenlabs_calls"], 0)
+            self.assertTrue((Path(d) / "research-review.json").exists())
+            self.assertTrue((Path(d) / "research-transcript.html").exists())
+            self.assertTrue((Path(d) / "source-notes.md").exists())
+            self.assertFalse((Path(d) / "first-light-preview.mp3").exists())
 
 
 if __name__ == "__main__":
