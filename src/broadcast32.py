@@ -77,6 +77,8 @@ def _editorial_beat_plan(material):
             official = card.get("official_context", [])
             extra_rss = card.get("feed_detail_context", [])
             is_lead = section == "Top world headlines"
+            is_world_brief = section == "Around the world"
+            is_other_brief = not (is_lead or is_world_brief)
             # Two RSS headlines do not justify a full five-minute report.
             # Prefer meaningful source detail: distinct summaries and
             # official excerpts are more useful than headline counts alone.
@@ -94,8 +96,12 @@ def _editorial_beat_plan(material):
             # article snippets, especially truncated RSS descriptions,
             # are not a license to write invented background.
             explainable = complete_excerpts + len(extra_rss) >= 2 or bool(official)
+            # Lead stories receive the available depth. Short world
+            # briefs should never crowd out the most meaningful reports;
+            # this is a cap, not permission to pad when sources are thin.
+            pacing_cap = 220 if is_lead else 88 if is_world_brief else 112
             budget = min(
-                220 if is_lead else 160,
+                pacing_cap,
                 (65 if is_lead else 42)
                 + min(6, len(distinct)) * (16 if is_lead else 12)
                 + min(4, len(official)) * 24
@@ -113,7 +119,14 @@ def _editorial_beat_plan(material):
                 "substantive_source_excerpts": long_excerpts,
                 "complete_source_excerpts": complete_excerpts,
                 "additional_complete_rss_sentences": len(extra_rss),
-                "story_role": "world_lead" if is_lead else "short_report",
+                "story_role": (
+                    "world_lead" if is_lead else
+                    "world_brief" if is_world_brief else "category_brief"
+                ),
+                "pacing_cap_words": pacing_cap,
+                "estimated_segment_seconds_at_brian_rate": round(
+                    budget * 60 / SPEECH_RATE_WPM
+                ),
                 "narrative_depth": (
                     "supported_explainer" if explainable else "brief_only"
                 ),
@@ -327,9 +340,12 @@ def _materials_for(material, sections):
 def _prompt(now, part, material, target, beat_plan=None):
     if part == "world":
         assignment = (
-            "Part A: open with a compelling, source-grounded lead sentence about "
-            "the most important actual development. Then explain the TWO "
-            "lead world stories with a coherent beginning, supporting details "
+            "Part A: start with PREVIEW: followed by 20–36 SPOKEN WORDS "
+            "teasing TWO distinctly sourced world developments, never "
+            "inventing their significance. Then write STORY: followed by "
+            "the actual world report. The preview is a short editorial hook, "
+            "not a third or duplicate story. Explain the TWO lead world "
+            "stories with a coherent beginning, supporting details "
             "and what is still unknown. Give shorter, distinct reports from "
             "Around the world. The second lead must have its own fresh opening, "
             "not be a second reading of the same event. Include significance "
@@ -374,6 +390,14 @@ Be substantive, fluent, neutral, precise and concise.
 
 BROADCAST EDITORIAL STRUCTURE (original, single-presenter newsroom voice):
 - Think in complete STORIES, not an RSS headline-reading list.
+- Part A format MUST be PREVIEW: [20-36 word hook about the TWO selected
+  leads, from today's cited evidence] STORY: [world news report]. No
+  quotation marks, list labels, fictional hosts, or duplicate lead sentences.
+- For continuing stories, the previous edition contains only prior
+  HEADLINES, NOT confirmed historical developments. Describe a change
+  only when a today's exact publisher excerpt supports that change.
+  Never say "yesterday brought progress" or "what changed" simply because
+  the old and new headlines differ. If evidence is thin, omit a comparison.
 - For each of the two world leads: start with an informative, listener-
   facing development or question whose premise is supported by the evidence.
   Within two sentences identify who is reporting or asserting it. Then
@@ -474,10 +498,11 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+", model or ""):
         return None, {"reason": "invalid model", "provider_calls": 0}
     if __package__:
-        from . import newsroom3, research33
+        from . import newsroom3, research33, editorial33
     else:
         import newsroom3
         import research33
+        import editorial33
     dossiers_material = research33.enrich_writer_material(
         dossiers, newsroom3.writer_material(dossiers)
     )
@@ -548,11 +573,12 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
                       "provider_calls": count[0]}
 
 
+    preview, world_report, preview_meta = editorial33.split_preview(a)
     opening = (
         f"Good morning, San Antonio. It's {now.strftime('%A, %B %d, %Y')}. "
-        "This is First Light: World Report. Today's news is produced with "
-        "AI assistance, with reports attributed to their original sources. "
-        "You'll find source links and corrections in our show notes."
+        "This is First Light: World Report. Our reporting is produced with "
+        "AI assistance and attributed to its sources. Links and corrections "
+        "are in the show notes."
     )
     closing = (
         "That's First Light: World Report. You can read the original "
@@ -561,7 +587,7 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         "and have a thoughtful day."
     )
     script = _condense(" ".join((
-        opening, early_alert_text, a,
+        opening, early_alert_text, preview, world_report,
         "Now let's turn to business, science and technology.",
         b, weather_text, closing,
     )))
@@ -594,12 +620,17 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
         "cache_hits": int(a_hit) + int(b_hit),
         "retries": max(0, count[0] - (2 - int(a_hit) - int(b_hit))),
         "segment_word_targets": {"world": world_target, "other": rest_target},
+        "story_pacing_plan": world_beats + rest_beats,
         "evidence_points": sum(
             beat["distinct_attributed_excerpts"] for beat in world_beats + rest_beats
         ),
         "research_source_cards": len(world_beats) + len(rest_beats),
         "duration_preflight": duration,
         "method": "two_source_partitioned_segments_plus_deterministic_weather",
+        "cold_open": preview_meta,
+        "continuity_review": editorial33.continuing_story_review(
+            dossiers_material
+        ),
         "world_words": len(a.split()),
         "other_words": len(b.split()),
         "under_delivered_sections": under_delivery,

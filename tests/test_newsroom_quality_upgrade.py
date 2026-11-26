@@ -149,7 +149,8 @@ class NarratorDeliveryTests(unittest.TestCase):
         breaks = re.findall(r'<break time="([0-9.]+)s" />', result)
         self.assertEqual(breaks, ["0.4", "0.5", "0.65", "0.45"])
         spoken = re.sub(r'<break time="[0-9.]+s" />', "", result)
-        self.assertEqual(" ".join(spoken.split()), " ".join(self.script.split()))
+        self.assertEqual(" ".join(spoken.split()),
+                         " ".join(tts.pronunciation.prepare(self.script)[0].split()))
         self.assertLessEqual(len(result), tts.MAX_SCRIPT_CHARS)
 
     def test_no_fake_break_from_source_quoted_phrase(self):
@@ -233,7 +234,7 @@ class NarratorDeliveryTests(unittest.TestCase):
                 r'<break time="[0-9.]+s" />', "", payload["text"]
             )
             self.assertEqual(" ".join(restored.split()),
-                             " ".join(self.script.split()))
+                             " ".join(tts.pronunciation.prepare(self.script)[0].split()))
             self.assertTrue(target.is_file())
 
 

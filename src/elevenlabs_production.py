@@ -90,7 +90,7 @@ def delivery_text(spoken_script):
     # that might be interpreted as instructions by the voice engine.
     if re.search(r"<\s*/?\s*break\b", spoken_script, re.I):
         raise NarratorFailure("untrusted speech markup in narration script")
-    result, _pronunciation_review = pronunciation.prepare(spoken_script)
+    result = spoken_script
     for marker, seconds in DELIVERY_PAUSES:
         boundary = re.compile(
             r"(?<=[.!?])\s+(?=" + re.escape(marker) + r")",
@@ -100,6 +100,9 @@ def delivery_text(spoken_script):
             lambda match: f' <break time="{seconds}s" /> ',
             result, count=1,
         )
+    # Apply speech aliases AFTER section detection, so the canonical
+    # "San Antonio" weather marker still receives its intended pause.
+    result, _pronunciation_review = pronunciation.prepare(result)
     if len(result) > MAX_SCRIPT_CHARS:
         raise NarratorFailure("prepared narration exceeds TTS character cap")
     return result

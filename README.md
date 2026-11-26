@@ -720,3 +720,65 @@ This update does **not** change the primary narrator (Brian),
 eligible backup (Daniel), the current free-plan cap, voice retirement
 date, publication schedule or current podcast assets. All live audio
 testing remains opt-in and subject to remaining voice credits.
+
+
+## Newsroom 3.3: stronger openings, careful follow-ups, pacing, local pronunciation
+
+This editorial and presentation pass is designed for a **single narrator**,
+Brian, with Daniel as the existing eligible backup. We are adapting useful
+newsroom principles, not copying any other news podcast's script or format.
+
+**20-second opening.** The existing first Gemini source-gated writer
+request is now instructed to begin with a labelled 20–36-word PREVIEW of
+the actual two leading stories, then STORY: and its regular narrative.
+The writer's output is parsed: the markers are never spoken or published.
+Unstructured or invalid previews are rejected as hooks and the world
+story simply plays normally. There is **no additional model call** and
+all preview claims pass the same current-source numeric checks. The
+AI-assistance/source disclaimer stays in the spoken introduction.
+
+**What changed since the last episode.** Prior release headlines remain
+low-confidence editorial memory, not historical evidence of events.
+Story research includes a deterministic 'possibly continuing story'
+advisory when earlier coverage exists. The prompt explicitly forbids
+claiming progress or news changes just because two headlines differ.
+The only valid reason to say a development changed is current-day
+source material that actually describes that development. No automatic
+independent verification is claimed.
+
+**Editorial pacing.** Two world leads get the strongest opportunity for
+supported explanation, while around-the-world briefs cap at 88 advisory
+words and business/science/tech briefs at 112. Word caps are never
+minimums. The script stays shorter if actual sources are too thin.
+The editorial pacing plan is preserved in writer diagnostics. Audio
+runtime is still checked against the real MP3 after synthesis.
+
+**Episode packaging.** The two source-linked world lead headlines also
+generate a bounded, source-faithful editorial episode title. It appears
+on the site, in latest.json, and on **new** RSS items through a versioned
+title marker in each GitHub Release. The canonical RSS GUID, episode
+audio URL and earlier episode titles remain unchanged. HTML and XML
+escaping protect against unsafe source strings. No fake source material
+or chapter timestamps are invented.
+
+**San Antonio weather pronunciation.** The reported issue concerned
+Brian saying the city name near the end. The TTS-only renderer now
+offers a tentative, reversible weather-section reading:
+'San An-TOH-nee-oh'. The actual intro, episode transcript, RSS and
+website still say **San Antonio**. It only targets the controlled
+weather marker and later local-weather references, not ordinary world
+news quotations or the greeting. This is an **audio hypothesis**,
+not a confirmed pronunciation fix. After listening to an unpublished
+preview, set repository Actions variable
+FIRST_LIGHT_SAN_ANTONIO_PRONUNCIATION to 'original' to revert it,
+or 'guided' (default) to retry it. Both daily and preview workflows
+honor that variable. Additional personal names are never guessed.
+
+**Acceptance.** The offline suite tests cold-open parsing, safe
+continuity, source-linked titles, weather-only city alias and reversal,
+stable podcast GUIDs, Brian/Daniel selection, zero extra model calls,
+and nonpublication during test previews. A one-time, guarded,
+unpublished 3.3 preview may run on merge after CI; it uses live provider
+credits **only when the existing budget check permits it**. Its artifact
+expires after a day and can be listened to before further production
+changes. The audio and public episode are never overwritten by preview.
