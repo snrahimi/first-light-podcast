@@ -78,6 +78,24 @@ def _issuer_matches(url, publisher):
     return path.startswith(allow[1])
 
 
+def _complete_official_sentences(paragraphs):
+    """Use only intact agency sentences, not chopped fragments or headlines.
+
+    Paragraphs were already filtered to the selected release. This is a
+    presentation/evidence-quality filter, not additional site scraping.
+    """
+    result = []
+    for paragraph in paragraphs:
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9“\"'])", paragraph):
+            sentence = sentence.strip()
+            if (sentence.endswith((".", "!", "?"))
+                    and 45 <= len(sentence) <= 255
+                    and len(sentence.split()) >= 8
+                    and sentence not in result):
+                result.append(sentence)
+    return result
+
+
 def get_official_excerpt(url, publisher, get=requests.get, headline=None):
     """One eligible public agency web page, with no redirects or PDFs.
 
@@ -159,13 +177,18 @@ def get_official_excerpt(url, publisher, get=requests.get, headline=None):
                    for prev in unique):
                 continue
             unique.append(paragraph)
-        text = " ".join(unique[:8])[:MAX_CONTEXT_CHARS]
-        if len(text) == MAX_CONTEXT_CHARS:
-            text = text.rsplit(" ", 1)[0].strip()
+        # Never cut an official sentence mid-thought. Select the first
+        # complete, distinct statements from this article only.
+        sentences = _complete_official_sentences(unique[:8])
+        kept = []
+        for sentence in sentences:
+            if len(" ".join(kept + [sentence])) > MAX_CONTEXT_CHARS:
+                break
+            kept.append(sentence)
+        text = " ".join(kept)
         if len(text) < 100:
             return None
-        spans = [p[:245].strip() for p in unique[:8] if len(p) >= 35]
-        excerpts = [p for p in spans if p in text][:MAX_OFFICIAL_EXCERPTS]
+        excerpts = kept[:MAX_OFFICIAL_EXCERPTS]
         if not excerpts:
             return None
         return {
@@ -361,30 +384,46 @@ def enrich_dossiers(dossiers, get=requests.get):
     No single failed API may prevent the original RSS-based episode.
     """
     fetched = 0
-    for chapter in dossiers.values():
+    for section, chapter in dossiers.items():
         for dossier in chapter:
             dossier["reporting_comparison"] = _reporting_comparison(dossier)
             dossier["official_context"] = []
             dossier["official_page_fetches_attempted"] = 0
-            for source in dossier["sources"]:
-                if fetched >= MAX_DOCUMENTS:
-                    break
-                if not source.get("primary"):
-                    continue
-                if not _issuer_matches(source["url"], source["publisher"]):
+            eligible = [
+                src for src in dossier["sources"]
+                if src.get("primary") and
+                _issuer_matches(src["url"], src["publisher"])
+            ]
+            # Allocate scarce retrieval slots across leads before briefs,
+            # rather than allowing one heavily linked story to use all 4.
+            per_story_cap = 2 if section == "Top world headlines" else 1
+            dossier["official_retrieval35"] = {
+                "eligible_issuer_links": len(eligible),
+                "attempted": 0,
+                "documents_with_complete_excerpts": 0,
+                "skipped_due_to_global_or_story_cap": 0,
+                "rejected_or_unavailable": 0,
+            }
+            for idx, source in enumerate(eligible):
+                if fetched >= MAX_DOCUMENTS or idx >= per_story_cap:
+                    dossier["official_retrieval35"]["skipped_due_to_global_or_story_cap"] += 1
                     continue
                 fetched += 1
                 dossier["official_page_fetches_attempted"] += 1
+                dossier["official_retrieval35"]["attempted"] += 1
                 context = get_official_excerpt(
                     source["url"], source["publisher"], get=get,
                     headline=source["title"],
                 )
                 if context:
                     dossier["official_context"].append(context)
+                    dossier["official_retrieval35"]["documents_with_complete_excerpts"] += 1
                     dossier["uncertainties"].append(
                         "The linked issuing-agency page documents its statement "
                         "but is not independent corroboration."
                     )
+                else:
+                    dossier["official_retrieval35"]["rejected_or_unavailable"] += 1
     return dossiers
 
 
@@ -537,6 +576,19 @@ def validate_research(dossiers):
     return {
         "official_documents_checked": validated,
         "official_document_fetches_attempted": attempts,
+        "official_eligible_urls": sum(
+            card.get("official_retrieval35", {}).get("eligible_issuer_links", 0)
+            for chapter in dossiers.values() for card in chapter
+        ),
+        "official_urls_rejected_or_unavailable": sum(
+            card.get("official_retrieval35", {}).get("rejected_or_unavailable", 0)
+            for chapter in dossiers.values() for card in chapter
+        ),
+        "official_urls_skipped_by_cap": sum(
+            card.get("official_retrieval35", {}).get(
+                "skipped_due_to_global_or_story_cap", 0
+            ) for chapter in dossiers.values() for card in chapter
+        ),
         "official_distinct_excerpts": sum(
             len(doc["excerpts"]) for chapter in dossiers.values()
             for card in chapter for doc in card.get("official_context", [])
