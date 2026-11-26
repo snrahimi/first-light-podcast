@@ -881,6 +881,22 @@ def news_and_script(_client, now, weather):
         dossiers, evidence_metrics, leads
     )
     edition["newsroom3_audit"]["phase33_research"] = research_metrics
+    quality["research_desk35"] = {
+        "event_links": research_metrics["event_link35"],
+        "official_source_retrieval": {
+            "eligible_urls": research_metrics["official_eligible_urls"],
+            "attempted": research_metrics["official_document_fetches_attempted"],
+            "unavailable_or_rejected": research_metrics[
+                "official_urls_rejected_or_unavailable"
+            ],
+            "skipped_within_caps": research_metrics["official_urls_skipped_by_cap"],
+            "accepted_documents": research_metrics["official_documents_checked"],
+        },
+        "numeric_evidence_policy": (
+            "section-specific, including spoken 11-to-99, "
+            "not semantic fact verification"
+        ),
+    }
     edition["newsroom3_audit"]["research_desk34"] = {
         "coverage": coverage,
         "lead_cards": research_cards,
@@ -1698,6 +1714,7 @@ def main():
                 "official_document_fetches_attempted": edition["newsroom3_audit"]["phase33_research"]["official_document_fetches_attempted"],
                 "related_feed_reports_added": edition["newsroom3_audit"]["phase33_research"]["selected_story_related_feeds"],
                 "lead_feed_context_sentences": edition["newsroom3_audit"]["phase33_research"]["lead_feed_context_sentences"],
+                "research_desk35": edition["script_quality"]["research_desk35"],
                 "script_words": edition["script_quality"]["script_words"],
                 "estimated_spoken_seconds": edition["script_quality"]["estimated_duration_seconds"],
                 "script_target_duration_estimated": edition["script_quality"]["duration_preflight"]["estimated_in_target"],
