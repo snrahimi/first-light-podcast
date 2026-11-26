@@ -9,6 +9,7 @@ time-zone expansions are deterministic, not inferred from geography.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 
@@ -44,7 +45,33 @@ LOCAL_CONTEXT = re.compile(
     r"local weather|weather in San Antonio|NWS (?:Austin|San Antonio))",
     re.IGNORECASE,
 )
-VALID_SPOKEN = re.compile(r"^[A-Za-z][A-Za-z \-']{1,84}$")
+VALID_SPOKEN = re.compile(r"^[A-Za-z][A-Za-z \\-']{1,84}$")
+LOCAL_WEATHER_START = re.compile(
+    r"And now, a look at the weather in San Antonio\.",
+    flags=re.IGNORECASE,
+)
+LOCAL_CITY_NAME = re.compile(r"(?<!\w)San Antonio(?!\w)", flags=re.IGNORECASE)
+# A tested-in-code, but not yet human-approved acoustic hypothesis.
+# Only the weather segment near the end uses this alternative;
+# the opening and all public transcripts keep the original spelling.
+LOCAL_CITY_GUIDED_ALIAS = "San An-TOH-nee-oh"
+
+
+def local_city_pronunciation(text, mode):
+    """Restrict the optional weather-section alias to late local coverage."""
+    if mode not in ("guided", "original"):
+        raise ValueError("Unsupported San Antonio pronunciation mode")
+    hit = LOCAL_WEATHER_START.search(text)
+    if mode == "original" or not hit:
+        return text, False
+    # The source script's weather marker is produced by a controlled
+    # deterministic template. Limit replacement to this trailing region.
+    before, after = text[:hit.start()], text[hit.start():]
+    after, replacements = LOCAL_CITY_NAME.subn(
+        lambda _: LOCAL_CITY_GUIDED_ALIAS, after
+    )
+    return before + after, bool(replacements)
+
 
 
 def load_glossary(path=LEXICON):
@@ -127,7 +154,7 @@ def _replace_clock_zones(text):
     return CLOCK_ZONE.sub(replace, text), expanded, left_ambiguous
 
 
-def prepare(script, *, rules=None):
+def prepare(script, *, rules=None, san_antonio_mode=None):
     """Return TTS-only speech text, plus review-only metadata.
 
     The original script is never mutated. Known pronunciations are
@@ -138,8 +165,13 @@ def prepare(script, *, rules=None):
         raise ValueError("Pronunciation input must be a string")
     pairs = load_glossary() if rules is None else list(rules)
     names, applied = _replace_names(script, pairs)
-    spoken, zones, ambiguous = _replace_clock_zones(names)
+    mode = (os.getenv("FIRST_LIGHT_SAN_ANTONIO_PRONUNCIATION", "guided")
+            if san_antonio_mode is None else san_antonio_mode)
+    weather_names, local_alias_applied = local_city_pronunciation(names, mode)
+    spoken, zones, ambiguous = _replace_clock_zones(weather_names)
     return spoken, {
+        "san_antonio_weather_alias_applied": local_alias_applied,
+        "san_antonio_mode": mode,
         "explicit_city_or_name_rules_applied": applied,
         "expanded_time_zone_codes": zones,
         "unresolved_time_zone_codes": sorted(set(ambiguous)),
