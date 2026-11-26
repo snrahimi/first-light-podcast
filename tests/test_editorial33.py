@@ -43,6 +43,11 @@ class Editorial33MetadataTests(unittest.TestCase):
             "Release content\n" + marker + "\nOther notes"
         ), title)
         self.assertIsNone(editorial33.title_from_release_notes("Legacy release"))
+        # The RSS assembler parses historical Release bodies. It must
+        # ignore malformed owner-supplied markers, never crash the feed.
+        self.assertIsNone(editorial33.title_from_release_notes(
+            "<!-- FIRST_LIGHT_EPISODE_TITLE_V1:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz -->"
+        ))
         release = {
             "tag_name": "first-light-2026-11-25",
             "published_at": "2026-11-25T10:30:00Z",

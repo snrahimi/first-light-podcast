@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import base64
+import binascii
 
 PREVIEW_PATTERN = re.compile(
     r"^PREVIEW:\s*(?P<preview>.+?)\s+STORY:\s*(?P<story>.+)$",
@@ -152,7 +153,7 @@ def title_from_release_notes(body):
         value = base64.urlsafe_b64decode(
             encoded + "=" * (-len(encoded) % 4)
         ).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, binascii.Error):
         return None
     if not value.startswith("First Light") or len(value) > 155 or any(
         ord(character) < 32 for character in value
