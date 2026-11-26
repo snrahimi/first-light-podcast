@@ -45,7 +45,7 @@ LOCAL_CONTEXT = re.compile(
     r"local weather|weather in San Antonio|NWS (?:Austin|San Antonio))",
     re.IGNORECASE,
 )
-VALID_SPOKEN = re.compile(r"^[A-Za-z][A-Za-z \\-']{1,84}$")
+VALID_SPOKEN = re.compile(r"^[A-Za-z][A-Za-z \-']{1,84}$")
 LOCAL_WEATHER_START = re.compile(
     r"And now, a look at the weather in San Antonio\.",
     flags=re.IGNORECASE,
