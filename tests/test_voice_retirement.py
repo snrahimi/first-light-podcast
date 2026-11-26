@@ -94,7 +94,7 @@ class VoiceRetirementTests(unittest.TestCase):
             )
             self.assertEqual(
                 post.call_args.kwargs["json"]["text"],
-                audition.SAMPLE
+                vr.RETIREMENT_SAMPLE
             )
             self.assertEqual(
                 post.call_args.kwargs["json"]["model_id"],
@@ -118,6 +118,17 @@ class VoiceRetirementTests(unittest.TestCase):
         report = vr.audit("fake-key", get=get)
         self.assertFalse(report["candidates"]["finley"]["known_free_tier_api_block"])
         self.assertFalse(report["candidates"]["finley"]["read_only_audition_eligible"])
+
+
+    def test_retirement_sample_covers_actual_pronunciation_risks(self):
+        self.assertLessEqual(len(vr.RETIREMENT_SAMPLE), 820)
+        self.assertGreaterEqual(len(vr.RETIREMENT_SAMPLE.split()), 90)
+        audition.audition_payload(vr.RETIREMENT_SAMPLE)
+        for phrase in ("San Antonio", "Kyiv", "Cartagena",
+                       "Warsaw", "Tehran", "Eastern Time",
+                       "Central Standard Time"):
+            self.assertIn(phrase, vr.RETIREMENT_SAMPLE)
+        self.assertEqual(vr.RETIREMENT_SAMPLE.count("San Antonio"), 2)
 
     def test_no_production_voice_change_or_publication_permissions(self):
         from pathlib import Path
