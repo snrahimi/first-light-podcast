@@ -1,0 +1,82 @@
+name: ElevenLabs Voice Retirement Read-only Audit and Manual Auditions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/voice-retirement-audit.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        required: true
+        default: audit_only
+        description: 'GET-only account audit or one manually chosen TTS sample'
+        options:
+          - audit_only
+          - audition_one
+      candidate:
+        type: choice
+        required: true
+        default: sawyer
+        description: 'Used only for audition_one'
+        options:
+          - sawyer
+          - finley
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-light-voice-retirement-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  voice-audit:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'FIRST LIGHT VOICE RETIREMENT READ ONLY AUDIT') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Configure Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install audit-only dependency
+        run: python -m pip install requests
+
+      - name: Pass offline tests before account inspection
+        run: |
+          python -m unittest discover -s tests -p 'test_voice_retirement.py' -v
+          python -m py_compile src/voice_retirement.py
+
+      - name: Read subscription and Sawyer/Finley metadata (zero TTS)
+        if: ${{ github.event_name == 'push' || inputs.mode == 'audit_only' }}
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: python -m src.voice_retirement audit
+
+      - name: Install MP3 verifier only for explicitly requested audition
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'audition_one' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Run a single manually selected replacement audition
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'audition_one' }}
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: python -m src.voice_retirement audition "$CANDIDATE"
+
+      - name: Upload noncommercial audit or audition evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-light-retirement-voice-audit-${{ github.run_id }}
+          path: voice-retirement-audit/
+          if-no-files-found: warn
+          retention-days: 3
