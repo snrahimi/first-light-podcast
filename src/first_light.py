@@ -353,7 +353,7 @@ def rss_news(now):
                 encountered.add(identity)
                 allstories.append({
                     "category": section, "publisher": name,
-                    "title": title, "summary": tidy(story.get("summary"), 260),
+                    "title": title, "summary": tidy(story.get("summary"), 720),
                     "url": link, "published": dt.isoformat(), "age": age,
                 })
         except (requests.RequestException, ValueError, TypeError, OverflowError) as exc:
@@ -779,6 +779,7 @@ def news_and_script(_client, now, weather):
     research33.link_selected_feed_context(dossiers, groups)
     evidence_metrics = newsroom3.validate_dossiers(dossiers)
     research33.enrich_dossiers(dossiers)
+    research33.enrich_lead_feed_context(dossiers)
     research_metrics = research33.validate_research(dossiers)
     # Two source-partitioned drafts, rather than one oversized prompt
     # and another paid/limited call merely asking for extra words.
@@ -1633,6 +1634,7 @@ def main():
                 "official_documents_reviewed": edition["newsroom3_audit"]["phase33_research"]["official_documents_checked"],
                 "official_document_fetches_attempted": edition["newsroom3_audit"]["phase33_research"]["official_document_fetches_attempted"],
                 "related_feed_reports_added": edition["newsroom3_audit"]["phase33_research"]["selected_story_related_feeds"],
+                "lead_feed_context_sentences": edition["newsroom3_audit"]["phase33_research"]["lead_feed_context_sentences"],
                 "script_words": edition["script_quality"]["script_words"],
                 "estimated_spoken_seconds": edition["script_quality"]["estimated_duration_seconds"],
                 "script_target_duration_estimated": edition["script_quality"]["duration_preflight"]["estimated_in_target"],
