@@ -1,0 +1,65 @@
+name: First Light Editorial Audio Preview (Unpublished)
+
+on:
+  push:
+    branches: [main]
+    # New workflow automatically starts its one authorized preview on merge.
+    # Later commits affecting other files never start another preview.
+    paths:
+      - '.github/workflows/first-light-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: first-light-editorial-preview-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: Source-grounded editorial and Brian audio preview
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'START FIRST LIGHT EDITORIAL PREVIEW (ONE SHOT)') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Check out tested source
+        uses: actions/checkout@v6
+
+      - name: Configure Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install podcast and audio verification dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng
+          python -m pip install -r requirements.txt
+          ffprobe -version | head -n 1
+
+      - name: Run all offline regression tests before using any credits
+        run: python -m unittest discover -s tests -v
+
+      - name: Generate unpublished source-grounded Brian preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          FIRST_LIGHT_NARRATOR: elevenlabs
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
+          FEED_BASE_URL: ${{ vars.FEED_BASE_URL }}
+        run: python -m src.first_light_preview
+
+      - name: Upload audio and transcript for listening (never publish)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-light-unpublished-editorial-preview
+          path: preview-review/
+          if-no-files-found: warn
+          retention-days: 1
