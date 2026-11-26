@@ -209,8 +209,15 @@ class LeadDetailTests(unittest.TestCase):
     def test_numeric_gate_accepts_only_exact_validated_extra_context(self):
         dossiers = self.sample_dossiers()
         lead = dossiers["Top world headlines"][0]
-        lead["sources"][0]["summary"] += (
-            " The agency scheduled 17 public hearings after the decision was announced by officials."
+        # Put the supported figure in a complete extra sentence that
+        # actually qualifies for the capped first two source excerpts.
+        lead["sources"][0]["summary"] = (
+            lead["sources"][0]["summary"].replace(
+                "Officials plan to publish the technical assessment next "
+                "week before deciding whether repairs are required.",
+                "Officials plan to publish 17 technical assessments next "
+                "week before deciding whether repairs are required."
+            )
         )
         research33.enrich_lead_feed_context(dossiers)
         research33.validate_research(dossiers)
