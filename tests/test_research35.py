@@ -49,6 +49,8 @@ class SameEventTests(unittest.TestCase):
              "France holds interest rates after inflation report"),
             ("EU announces tariffs on China imports",
              "EU lifts tariffs on China imports"),
+            ("United Nations Security Council sanctions Libya vessel",
+             "United Nations Security Council sanctions Ukraine oil firm"),
         )
         for headline, other in unrelated:
             self.assertEqual(
