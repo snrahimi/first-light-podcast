@@ -113,7 +113,9 @@ def primary_rss_candidates(now, get=requests.get):
                     "category": category,
                     "publisher": publisher,
                     "title": title,
-                    "summary": clean(entry.get("summary"), 260),
+                    # Preserve more agency-provided context for complete
+                    # sentence extraction; still bounded and source-linked.
+                    "summary": clean(entry.get("summary"), 600),
                     "url": link,
                     "published": published.isoformat(),
                     "age": age,
