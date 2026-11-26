@@ -935,7 +935,11 @@ fact-checking or a guarantee of a longer episode.
 
 The changes do not alter Brian as primary or Daniel as fallback, the
 ElevenLabs account plan, current publication workflow or RSS identities.
-Regression tests are fully offline; the preview workflow retains
-read-only repository permissions and cannot publish Releases, RSS or
-Pages. A preview consumes voice credits only when explicitly run and
-the existing preflight permits it.
+Regression tests are fully offline. The new **First Light 3.5
+Research Desk Preview (No Voice)** workflow can run once with a guarded
+merge marker, or manually from GitHub Actions. It fetches current
+sources, writes a source-only transcript and evidence diagnostics, and
+uploads a one-day review artifact. It uses ZERO ElevenLabs credits,
+cannot publish Releases, RSS or Pages, and has read-only repository
+permissions. The separate optional full **Editorial Audio Preview**
+remains manual and subject to existing voice-credit preflight.
