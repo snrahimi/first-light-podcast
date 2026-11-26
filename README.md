@@ -888,3 +888,54 @@ before merging. An optional one-shot **unpublished** newsroom preview
 can validate actual generation without touching Releases, RSS or Pages.
 No paid upgrade, automatic library voice audition or production voice
 switch is performed.
+
+
+## Newsroom 3.5: event-linked evidence, official sentence quality and numeric isolation
+
+The new Research Desk controls address the 3.4 unpublished test, where
+seven stories were sourced but the two world leads remained thin. This
+is an incremental accuracy/reliability pass, not a claim of human
+fact-checking or a guarantee of a longer episode.
+
+- `src/research35.py` scores potentially related RSS reports by a
+  shared news EVENT and multiple meaningful SUBJECT anchors. Generic
+  organization, country, court, UN, government and market terms do not
+  make separate events equivalent. Obvious opposing rate/tariff
+  outcomes are not merged. A match is a **candidate for further source
+  review**, never proof that two publishers independently verified a
+  claim. Only existing publisher-domain validated RSS links can be
+  attached, with their exact original excerpts.
+- The official-page extractor still accepts only the original agency
+  links from an official RSS feed (NASA, BLS, or UN), HTTPS and issuer
+  URL checks, no redirects or PDFs, and strict HTML/size/time budgets.
+  It now keeps **complete sentences** instead of cutting an agency
+  statement mid-thought. Up to two eligible agency pages may be
+  inspected for a leading world story; other stories get one, and the
+  whole episode still has a hard cap of four. There is no open-ended
+  search or scraping of publisher article bodies. Agency RSS
+  descriptions retain at most 600 characters for safe, complete
+  sentence selection.
+- Evidence diagnostics distinguish candidate reports examined,
+  same-event matches, issuer pages eligible, attempted, unavailable,
+  and skipped due to per-story or global budgets. These diagnostics
+  appear in the public source notes and review metadata.
+- `newsroom3.script_numeric_gate` now also recognizes unambiguous
+  English number words from **eleven through ninety-nine**. The two
+  Gemini news sections are validated against **their own source
+  sections** before caching. A statistic found only in the business
+  source excerpts can no longer authorize that number in the world
+  script. Unsupported numeric world drafts are discarded *before*
+  spending the optional second Gemini call, with the existing
+  deterministic sourced fallback used instead. Global script validation
+  still applies before narration.
+- This is lexical evidence checking, **not semantic fact verification**.
+  Source presence does not ensure a narrated statistic is assigned
+  to the correct actor or event. Editors should still check sensitive
+  numbers, disputed claims and future expectations.
+
+The changes do not alter Brian as primary or Daniel as fallback, the
+ElevenLabs account plan, current publication workflow or RSS identities.
+Regression tests are fully offline; the preview workflow retains
+read-only repository permissions and cannot publish Releases, RSS or
+Pages. A preview consumes voice credits only when explicitly run and
+the existing preflight permits it.
