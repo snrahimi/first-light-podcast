@@ -64,6 +64,13 @@ def local_city_pronunciation(text, mode):
     hit = LOCAL_WEATHER_START.search(text)
     if mode == "original" or not hit:
         return text, False
+    # Do not re-pronounce an arbitrary attributed quote containing the
+    # marker after a colon. The actual producer's weather section begins
+    # at a sentence boundary (possibly following an injected SSML pause).
+    if hit.start() and not text[:hit.start()].endswith(
+        (". ", "! ", "? ", "/> ")
+    ):
+        return text, False
     # The source script's weather marker is produced by a controlled
     # deterministic template. Limit replacement to this trailing region.
     before, after = text[:hit.start()], text[hit.start():]
