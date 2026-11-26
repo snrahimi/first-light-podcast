@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 import sys
 
-from . import first_light, transcript_display
+from . import first_light, transcript_display, official_context36
 
 LOG = logging.getLogger("firstlight.research35.preview")
 OUT = Path("research-preview")
@@ -27,6 +27,9 @@ def run(*, now=None, output=OUT):
     notes, sources, script, edition = first_light.news_and_script(None, now, weather)
     metrics = edition["script_quality"]
     research = metrics["research_desk35"]
+    official_value = official_context36.review_official_context(
+        edition.get("newsroom3_audit", {}).get("research_desk34", {}).get("lead_cards", [])
+    )
     result = {
         "status": "research_preview_complete",
         "unpublished": True,
@@ -40,6 +43,7 @@ def run(*, now=None, output=OUT):
         "original_source_links": len(sources),
         "world_leads": len(edition["rundown"].get("Top world headlines", [])),
         "research_desk35": research,
+        "official_context36_unpublished_editorial_value_audit": official_value,
         "source_attributed_claims": edition["newsroom3_audit"]["attributed_claims"],
         "independent_fact_checks": 0,
         "gemini_writing_requests": metrics["draft"].get("provider_calls", 0),
