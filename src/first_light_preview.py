@@ -70,6 +70,7 @@ def review_payload(edition, script, narrator=None, audio=None):
         "presentation_review": metrics["presentation_review"],
         "newsroom33": metrics.get("newsroom33", {}),
         "research_desk34": metrics.get("research_desk34", {}),
+        "research_desk35": metrics.get("research_desk35", {}),
         "episode_display_title": (
             edition.get("presentation33") or {}
         ).get("display_title"),
