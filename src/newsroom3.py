@@ -400,34 +400,83 @@ def _weather_numeric_tokens(weather):
     return tokens
 
 
-def script_numeric_gate(script, dossiers, weather, now):
-    """Reject new digit-based figures not in supplied evidence or weather.
+# Spoken figures are not literally digits in the Gemini response. Check
+# the high-risk 11-99 range too, without treating ordinary "one", "two"
+# or "first" as unsupported standalone factual quantities.
+TEEN_WORDS = {
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19,
+}
+TENS_WORDS = {
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+SMALL_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4,
+    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+}
+SPOKEN_NUMBER = re.compile(
+    r"\b(" + "|".join((*TEEN_WORDS, *TENS_WORDS)) +
+    r")(?:[- ](" + "|".join(SMALL_WORDS) + r"))?\b",
+    flags=re.I,
+)
 
-    Not semantic verification. Spelled-out numerals and paraphrases remain a
-    limitation, and substantive claims still need independent editorial review.
+
+def _spoken_numeric_tokens(value):
+    """Normalize unambiguous standalone eleven-to-ninety-nine phrases."""
+    result = set()
+    for match in SPOKEN_NUMBER.finditer(str(value)):
+        first = match.group(1).lower()
+        second = (match.group(2) or "").lower()
+        amount = TEEN_WORDS.get(first, TENS_WORDS.get(first))
+        if first in TENS_WORDS and second:
+            amount += SMALL_WORDS[second]
+        if amount is not None:
+            result.add(str(amount))
+    return result
+
+
+def script_numeric_gate(script, dossiers, weather, now, *,
+                        scope_sections=None):
+    """Reject unattested figures, including common spoken numbers 11–99.
+
+    Optionally scope sourced figures to one Gemini news section, so numbers
+    from a different subject area cannot authorize a world-news assertion.
+    This remains lexical evidence checking, not verification of meaning.
     """
     if DANGEROUS_CLAIMS.search(script):
         raise ValueError("Broadcast overclaims independent verification")
+    if scope_sections is not None:
+        if not isinstance(scope_sections, (tuple, list, frozenset, set)):
+            raise ValueError("Invalid source-section scope")
+        selected = {key: dossiers.get(key, []) for key in scope_sections}
+    else:
+        selected = dossiers
     evidence = " ".join(
         claim["evidence"]
-        for chapter in dossiers.values()
+        for chapter in selected.values()
         for dossier in chapter
         for claim in dossier["claim_ledger"]
     )
-    expected = set(NUMBER.findall(evidence))
-    for chapter in dossiers.values():
+    expected = set(NUMBER.findall(evidence)) | _spoken_numeric_tokens(evidence)
+    for chapter in selected.values():
         for dossier in chapter:
             for document in dossier.get("official_context", []):
                 for excerpt in document.get("excerpts", []):
                     expected.update(NUMBER.findall(excerpt))
+                    expected.update(_spoken_numeric_tokens(excerpt))
             # Supplemental lead details are only present after their exact
             # original-RSS strings passed validate_research(). These words
             # are publisher claims, never independent fact-check results.
             for detail in dossier.get("lead_feed_context", []):
                 expected.update(NUMBER.findall(detail["exact_excerpt"]))
+                expected.update(_spoken_numeric_tokens(detail["exact_excerpt"]))
     expected.update(_weather_numeric_tokens(weather))
     expected.update({str(now.year), str(now.day), "3.0", "5", "6", "7"})
-    unexpected = sorted(set(NUMBER.findall(script)) - expected)
+    unexpected = sorted(
+        (set(NUMBER.findall(script)) | _spoken_numeric_tokens(script)) - expected
+    )
     if unexpected:
         raise ValueError(
             "Unsupported numeric text in script: " + ", ".join(unexpected[:8])
