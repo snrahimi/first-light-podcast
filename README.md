@@ -636,3 +636,30 @@ December 31, 2026 retirement and current plan limits.
 
 References: [ElevenLabs pause guidance](https://elevenlabs.io/docs/help-center/product/core-capabilities/text-to-speech/how-can-i-add-pauses),
 [voice speed settings](https://elevenlabs.io/docs/help-center/product/core-capabilities/text-to-speech/can-i-change-the-pace-of-the-voice).
+
+## One-time editorial audio preview (requested November 25, 2026)
+
+Use the **First Light Editorial Audio Preview (Unpublished)** GitHub
+Actions workflow to review the new editorial writing and Brian delivery,
+without releasing a replacement episode.
+
+- The initial guarded preview runs **once**, when the workflow is first
+  merged onto main with the exact commit marker. Other code commits do
+  not trigger more previews; future manual reruns require workflow_dispatch.
+- Runs all offline regression tests first. Then checks current sources,
+  weather, memory, story selection, evidence, editorial script and QA
+  metrics, followed by real Brian narration using the existing
+  credit preflight and Daniel fallback if applicable.
+- Real TTS **consumes credits** if the account has enough for the
+  complete script. If insufficient, the TTS attempt is safely blocked
+  and the transcript remains in the artifact for inspection.
+- **Read-only repository permissions:** no writes to GitHub Releases,
+  Pages, RSS, the published site or today's current MP3.
+- The one-day Actions artifact named
+  **first-light-unpublished-editorial-preview** contains the full
+  source-grounded text, sources, diagnostics, readable HTML transcript,
+  and the MP3 if speech synthesis and audio verification succeed.
+- Public repository artifacts may be accessible to repository readers;
+  free-plan ElevenLabs evaluation is noncommercial with attribution.
+- Automated checks do not constitute independent factual verification.
+  Listening remains necessary to evaluate pronunciation and storytelling.
