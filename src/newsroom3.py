@@ -23,9 +23,10 @@ import feedparser
 import requests
 
 if __package__:
-    from . import editorial
+    from . import editorial, editorial33
 else:
     import editorial
+    import editorial33
 
 LOG = logging.getLogger("firstlight.newsroom3")
 
@@ -443,6 +444,14 @@ def writer_material(dossiers):
             "source_status": item["source_status"],
             "evidence_depth": item.get("evidence_depth", {}),
             "freshness": item.get("freshness", {}),
+            "continuity": editorial33.continuity_card({
+                "freshness": item.get("freshness", {}),
+                "previous": (
+                    {"headline": item["previous_coverage"],
+                     "date": item.get("previous_date")}
+                    if item.get("previous_coverage") else None
+                ),
+            }),
             "editorial_review": item.get("editorial_review", {}),
             "evidence": [{
                 "publisher": c["publisher"], "text": c["claim"],
