@@ -418,6 +418,14 @@ class PodcastTests(unittest.TestCase):
             _, _, script, edition = news_and_script(None, now, weather)
         self.assertIn("fallback", edition["script_mode"])
         self.assertNotIn("99999", script)
+        self.assertEqual(
+            edition["script_quality"]["newsroom33"]["cold_open"]["mode"],
+            "rejected_draft_used_source_fallback",
+        )
+        self.assertEqual(
+            edition["script_quality"]["newsroom33"]["cold_open"]["preview_words"],
+            0,
+        )
 
     def test_audio_probe_detects_short_and_invalid_mp3(self):
         valid = {"format": {"duration": "360.0", "bit_rate": "192000"},
