@@ -663,3 +663,60 @@ without releasing a replacement episode.
   free-plan ElevenLabs evaluation is noncommercial with attribution.
 - Automated checks do not constitute independent factual verification.
   Listening remains necessary to evaluate pronunciation and storytelling.
+
+## Newsroom 3.2: Pronunciation and evidence-backed lead stories
+
+### Pronunciation review
+
+The original transcript and fact-checked story evidence are **never**
+modified by pronunciation fixes. Only Brian and Daniel's speech-only
+payload is rewritten before ElevenLabs narration, and the current
+conservative TTS credit preflight counts the actual modified text.
+
+The small JSON glossary is at **config/voice_pronunciations.json**.
+A reviewed rule consists of the original written city/person name,
+a plain-language spoken alias, its category, and a source note. The
+first city review candidates are Kyiv and Cartagena. An alias changes
+whole-word/whole-name matches only, with safeguards against injected
+SSML, control characters and duplicate terms.
+
+**Do not guess unfamiliar people's names.** Check an authoritative
+reading or the speaker's preferred pronunciation first, then commit a
+reviewed new entry. Test the resulting sound: a plausible written
+respelling does not guarantee the voice will pronounce it naturally.
+
+For dates and time zones: a code is expanded only beside an actual
+12-hour clock time. UTC and GMT, and common US Eastern/Mountain/Pacific
+codes, get readable full names. CST/CDT/CT have several global meanings
+and are expanded ONLY when the surrounding text is identified as local
+San Antonio/National Weather Service weather reporting. Ambiguous IST,
+BST and others remain unchanged instead of being guessed.
+
+The unpublished test's **pronunciation_review** JSON lists which
+approved names and clock time-zone expansions were applied, and which
+abbreviations need human verification. Flash v2.5 uses plain aliases;
+it does not support the same inline phoneme tags as Flash v2.
+
+### Deeper world leads without padded reporting
+
+- Trusted publisher RSS summaries retain up to **720 normalized
+  characters**, rather than discarding text after 260.
+- The two leading world stories may receive a maximum of four additional
+  **complete** publisher summary sentences per story. No new network
+  requests and no article-body scraping or copied full articles.
+- Every added line must match its trusted original publisher feed
+  summary **exactly**. Truncated fragments, suspicious links,
+  duplicate sentences and missing source metadata are rejected.
+- The added evidence may inform a longer story arc when genuinely
+  meaningful. It never establishes independent factual verification,
+  and an episode may still be below five minutes if reporting is thin.
+- The existing numeric gate recognizes additional claims only after
+  source validation. This does not grant authority to unsupported
+  numbers or invented quotations.
+- Edition metadata now counts extra complete RSS sentences available
+  for lead narration, and the original article/link list remains visible.
+
+This update does **not** change the primary narrator (Brian),
+eligible backup (Daniel), the current free-plan cap, voice retirement
+date, publication schedule or current podcast assets. All live audio
+testing remains opt-in and subject to remaining voice credits.
