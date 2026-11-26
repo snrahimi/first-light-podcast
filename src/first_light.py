@@ -27,7 +27,7 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production, transcript_display
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production, transcript_display, editorial33
 else:
     import editorial
     import newsroom3
@@ -37,6 +37,7 @@ else:
     import monitor2plus
     import elevenlabs_production
     import transcript_display
+    import editorial33
 import base64
 import io
 import wave
@@ -772,6 +773,7 @@ def news_and_script(_client, now, weather):
         fallback_url=public_base().rstrip("/") + "/memory.json",
     )
     edition = editorial.curate(groups, recent, now)
+    edition["presentation33"] = editorial33.topic_packaging(edition)
     edition["history_for_backup"] = recent
     dossiers = newsroom3.build_dossiers(edition, leads)
     # Enrich already selected stories with high-overlap, traceable feed
@@ -823,6 +825,15 @@ def news_and_script(_client, now, weather):
     quality["presentation_review"] = broadcast32.presentation_review(
         script, edition
     )
+    quality["newsroom33"] = {
+        "cold_open": draft_stats.get("cold_open", {
+            "mode": "unavailable_source_fallback", "preview_words": 0
+        }),
+        "continuity_review": draft_stats.get("continuity_review", {
+            "possible_followups": 0, "source_grounded_change_verified": False
+        }),
+        "source_based_episode_title": edition["presentation33"]["display_title"],
+    }
     if not quality["duration_preflight"]["estimated_in_target"]:
         LOG.warning(
             "Pre-narration duration estimate %ds is short of 5 minutes by %ds "
@@ -1433,7 +1444,9 @@ def xml_feed(releases, base):
             continue
         item = ET.SubElement(ch, "item")
         day = release["tag_name"].replace("first-light-", "")
-        txt(item, "title", f"{TITLE} | {day}")
+        txt(item, "title", editorial33.title_from_release_notes(
+            release.get("body") or ""
+        ) or f"{TITLE} | {day}")
         txt(item, "link", release.get("html_url", base))
         ET.SubElement(item, "guid", {"isPermaLink": "false"}).text = release["tag_name"]
         voice_credit = (
@@ -1477,7 +1490,7 @@ def cover(path):
     im.save(path, format="PNG")
 
 
-def web_page(day, sources, transcript, narrator="Gemini Charon"):
+def web_page(day, sources, transcript, narrator="Gemini Charon", episode_heading=None):
     links = "".join(
         f'<li><a href="{html.escape(s["url"], quote=True)}" rel="noopener noreferrer">'
         f'{html.escape(s["title"])}</a></li>'
@@ -1488,12 +1501,17 @@ def web_page(day, sources, transcript, narrator="Gemini Charon"):
         'ElevenLabs</a> (' + html.escape(narrator) + ').</p>'
         if narrator.startswith("ElevenLabs ") else ""
     )
+    story_heading_html = (
+        '<h3 class="edition-headline">' + html.escape(episode_heading) + '</h3>'
+        if episode_heading else ""
+    )
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>First Light: World Report</title><style>
 body{{background:#0a1729;color:#edf2f8;font:18px/1.65 system-ui,sans-serif;
 max-width:770px;margin:40px auto;padding:0 20px}}a{{color:#ffc18b}}
 h1{{font-size:clamp(2rem,7vw,3.6rem);line-height:1.12}}img{{width:165px;border-radius:18px}}
+.edition-headline{{font-size:clamp(1rem,3vw,1.25rem);color:#ffd1a5;line-height:1.5;font-weight:600}}
 audio{{display:block;width:100%;margin:30px 0}}
 {transcript_display.TRANSCRIPT_CSS}
 .subtitle{{color:#b7c6d7}}footer{{font-size:14px;color:#b7c6d7;margin:50px 0}}
@@ -1502,6 +1520,7 @@ audio{{display:block;width:100%;margin:30px 0}}
 <h1>First Light:<br>World Report</h1>
 <p class="subtitle">Daily world news, business, science, tech & San Antonio weather</p>
 <h2>{html.escape(day)}</h2>
+{story_heading_html}
 <audio controls preload="metadata" src="latest.mp3?date={day}"></audio>
 <p><a href="latest.mp3?date={day}">Download this episode</a> ·
 <a href="feed.xml">Subscribe with RSS</a> ·
@@ -1545,7 +1564,10 @@ def main():
         + "\n\nTo request a correction, open an issue at "
           "https://github.com/snrahimi/first-light-podcast/issues/new/choose. "
           "Verify consequential claims with the original linked reporting.\n\n"
-        + editorial.memory_note(edition),
+        + editorial.memory_note(edition)
+        + "\n\n" + editorial33.title_release_marker(
+            edition["presentation33"]["display_title"]
+        ),
         encoding="utf-8",
     )
     evidence_path = WORK / f"first-light-{day}-evidence.json"
@@ -1618,6 +1640,7 @@ def main():
         json.dumps({
             "date": day,
             "title": TITLE,
+            "episode_display_title": edition["presentation33"]["display_title"],
             "audio_url": base + "/latest.mp3?date=" + day,
             "published_at": datetime.now(timezone.utc).isoformat(),
             "narrator": narrator,
@@ -1643,6 +1666,7 @@ def main():
                 "preflight_shortfall_words": edition["script_quality"]["duration_preflight"]["shortfall_words"],
                 "quality_scorecard": edition["quality_scorecard"],
                 "presentation_review": edition["script_quality"]["presentation_review"],
+                "newsroom33": edition["script_quality"]["newsroom33"],
                 "lead_explainer_ready": edition["lead_explainer_ready"],
                 "lead_story_count": edition["lead_story_count"],
                 "evidence_audit_url": base + "/evidence.json",
@@ -1653,7 +1677,8 @@ def main():
         encoding="utf-8"
     )
     (SITE / "index.html").write_text(
-        web_page(day, sources, script, narrator=narrator),
+        web_page(day, sources, script, narrator=narrator,
+                 episode_heading=edition["presentation33"]["display_title"]),
         encoding="utf-8",
     )
     (SITE / ".nojekyll").write_text("", encoding="utf-8")
