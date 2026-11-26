@@ -218,6 +218,10 @@ PUBLISHER_FEED_HOSTS = {
     "Guardian": ("theguardian.com",),
     "The Guardian": ("theguardian.com",),
     "Al Jazeera": ("aljazeera.com",),
+    "Deutsche Welle": ("dw.com",),
+    "France 24": ("france24.com",),
+    "ABC Australia": ("abc.net.au",),
+    "PBS News": ("pbs.org",),
 }
 MAX_RELATED_LEADS = 3
 MAX_RELATED_OTHER = 2
