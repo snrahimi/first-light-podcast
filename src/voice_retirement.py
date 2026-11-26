@@ -41,6 +41,25 @@ PAID = {"starter", "creator", "pro", "scale", "business", "enterprise"}
 LIBRARY_TYPES = {"professional", "community", "famous", "shared"}
 OUTPUT = Path("voice-retirement-audit")
 
+# Original First Light audition passage tests the pronunciation and
+# transitions which caused trouble in production. It describes no
+# real events and never asserts real-world news claims.
+RETIREMENT_SAMPLE = (
+    "Good morning, San Antonio. This is First Light: World Report. "
+    "In Kyiv, officials are reviewing a public statement, while reporters "
+    "in Cartagena await details. From Warsaw to Tehran, we are following "
+    "the day's international developments. A briefing is scheduled for "
+    "nine fifteen Eastern Time, with another update at eight thirty "
+    "Central Standard Time. Here in San Antonio, we'll track the forecast "
+    "and important local advisories. Also ahead: global markets, new "
+    "scientific research, and cybersecurity developments. We separate "
+    "agency statements from claims reported by publishers, and note what "
+    "remains uncertain. Find the original sources and full transcript on "
+    "the First Light website. Thanks for joining us, and have a "
+    "thoughtful day."
+)
+
+
 
 def _get_meta(url, key, *, get=requests.get):
     """Return only validated status and metadata, never raw exceptions."""
@@ -89,7 +108,7 @@ def audit(key, *, get=requests.get):
         # but it NEVER proves synthesis rights without the TTS audition.
         possible = bool(
             exists and plan == "paid" and headroom is not None
-            and headroom >= len(audition.SAMPLE)
+            and headroom >= len(RETIREMENT_SAMPLE)
         )
         voices[alias] = {
             "name": candidate["name"],
@@ -114,7 +133,7 @@ def audit(key, *, get=requests.get):
         "account_metadata_status": "available" if status == 200 else "unavailable",
         "credit_headroom": (
             "enough_for_one_conservative_sample"
-            if headroom is not None and headroom >= len(audition.SAMPLE)
+            if headroom is not None and headroom >= len(RETIREMENT_SAMPLE)
             else "insufficient_or_unverifiable"
         ),
         "text_to_speech_calls": 0,
@@ -144,8 +163,10 @@ def audition_one(alias, key, *, get=requests.get, post=requests.post,
         )
     # Strict spend cap from existing original audition: <=820 chars,
     # <=160 spoken words, one provider call, no retries.
-    audition.audition_payload()
-    audio = audition.request_sample(key, CANDIDATES[alias]["id"], post=post)
+    audition.audition_payload(RETIREMENT_SAMPLE)
+    audio = audition.request_sample(
+        key, CANDIDATES[alias]["id"], post=post, text=RETIREMENT_SAMPLE
+    )
     target_dir = Path(output)
     target_dir.mkdir(parents=True, exist_ok=True)
     temp = target_dir / "voice.partial.mp3"
@@ -163,13 +184,13 @@ def audition_one(alias, key, *, get=requests.get, post=requests.post,
         "replaces": CANDIDATES[alias]["replaces"],
         "duration_seconds": duration,
         "tts_requests": 1,
-        "script_characters": len(audition.SAMPLE),
+        "script_characters": len(RETIREMENT_SAMPLE),
         "audio_validated": True,
         "human_listening_approval": False,
         "production_changed": False,
     }
     (target_dir / "audition-script.txt").write_text(
-        audition.SAMPLE, encoding="utf-8"
+        RETIREMENT_SAMPLE, encoding="utf-8"
     )
     (target_dir / "audition-result.json").write_text(
         json.dumps(data, indent=2), encoding="utf-8"
