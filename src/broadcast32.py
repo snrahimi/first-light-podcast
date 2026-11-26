@@ -564,14 +564,24 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
             LOG.warning("Gemini world-section rejected: %s", rejected)
             return None, {"reason": "world_" + rejected,
                           "provider_calls": count[0]}
+        # Source-number validation is required for BOTH cached and freshly
+        # generated text. A number in business is not world-news evidence.
+        try:
+            newsroom3.script_numeric_gate(
+                a, dossiers, {}, now, scope_sections=info["first"]
+            )
+        except ValueError:
+            LOG.warning(
+                "World section contains an unsupported number; "
+                "rejecting before any second Gemini call"
+            )
+            return None, {
+                "reason": "world_numeric_evidence_gate",
+                "provider_calls": count[0],
+                "section_scope_checked": "world",
+            }
         if not a_hit:
-            # Source-number validation is needed before a section can be
-            # reused; do not cache malformed claims or unsourced numbers.
-            try:
-                newsroom3.script_numeric_gate(a, dossiers, {}, now)
-                _remember_section(cache_dir, model, a_prompt, a)
-            except ValueError:
-                LOG.warning("World section has unsupported figures; not caching")
+            _remember_section(cache_dir, model, a_prompt, a)
         b_prompt = _prompt(now, "other", rest_material, rest_target, rest_beats)
         b = _cached_section(cache_dir, model, b_prompt)
         b_hit = b is not None
@@ -583,12 +593,22 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
             LOG.warning("Gemini mixed-beat section rejected: %s", rejected)
             return None, {"reason": "mixed_" + rejected,
                           "provider_calls": count[0]}
+        try:
+            newsroom3.script_numeric_gate(
+                b, dossiers, {}, now, scope_sections=info["second"]
+            )
+        except ValueError:
+            LOG.warning(
+                "Business/science/tech section contains an unsupported "
+                "figure; using sourced fallback"
+            )
+            return None, {
+                "reason": "other_numeric_evidence_gate",
+                "provider_calls": count[0],
+                "section_scope_checked": "other",
+            }
         if not b_hit:
-            try:
-                newsroom3.script_numeric_gate(b, dossiers, {}, now)
-                _remember_section(cache_dir, model, b_prompt, b)
-            except ValueError:
-                LOG.warning("Mixed-beat section has unsupported figures; not caching")
+            _remember_section(cache_dir, model, b_prompt, b)
     except requests.RequestException as exc:
         LOG.warning("Segmented script request unavailable (%s)", type(exc).__name__)
         return None, {"reason": type(exc).__name__,
