@@ -782,3 +782,109 @@ unpublished 3.3 preview may run on merge after CI; it uses live provider
 credits **only when the existing budget check permits it**. Its artifact
 expires after a day and can be listened to before further production
 changes. The audio and public episode are never overwritten by preview.
+
+
+## Newsroom 3.4: Research Desk and legacy voice transition audit
+
+### Research Desk: stronger but evidence-faithful reporting
+
+- Source discovery now includes four additional HTTPS RSS news providers:
+  **Deutsche Welle, France 24, ABC Australia World and PBS News**.
+  Their story URLs must resolve to the actual publisher's allowed
+  domain before they can enter the source selection pool.
+- Existing per-feed byte limits, freshness windows, minimum-source
+  requirements, per-publisher caps, duplicate removal and machine
+  evidence checks remain in force.
+- `src/research34.py` builds **up to two lead-story research cards**
+  from already curated claims, extra *complete* RSS sentences, and
+  issuer-authorized official-document extracts. It checks links and
+  exact supporting text. No additional page scraping or model calls.
+- Claims are labeled as what publishers/issuing agencies **said**.
+  Exact source matching is not proof the underlying event occurred.
+  No claim is labeled independently fact-checked.
+- The existing two Gemini writing calls receive the lead research
+  cards and explicit instructions not to invent causes, consequences,
+  quotes, interviews, or future outcomes.
+- After drafting, a deterministic editorial check flags thin sourcing,
+  repeated reporting, source diversity and short sections. Wording
+  that falsely claims First Light personally conducted interviews or
+  independent fact checks is rejected, forcing the source-only
+  fallback. A length target is never a license to pad with fake news.
+- New diagnostics appear in latest.json and in the **unpublished
+  editorial audio preview** artifact, plus the release evidence notes.
+
+Public-source RSS coverage is not a substitute for field reporting.
+If major primary feeds fail, the episode is short or skipped rather
+than invented. New RSS publishers are accepted only if their links
+and attribution pass the existing checks.
+
+### ElevenLabs replacement-voice audit: no production changes
+
+ElevenLabs documents that original Default voices retire **December
+31, 2026**. Its recommended successors are:
+
+| Production now | Proposed replacement | Replacement voice ID |
+| --- | --- | --- |
+| Brian | Sawyer - Midnight Storyteller | 8dEUmyPMdDdK91vboYih |
+| Daniel | Finley - Articulate Anchor | fnYMz3F5gMEDGMWcH1ex |
+
+These replacements are in the **ElevenLabs Voice Library**, which
+ElevenLabs restricts for Free-tier API access. They may appear in the
+web application while the GitHub TTS API cannot use them.
+
+Open **ElevenLabs Voice Retirement Read-only Audit and Manual Auditions**
+under GitHub Actions:
+
+1. Select `audit_only` first. The workflow makes only three
+   authenticated GET requests: subscription, Sawyer metadata and
+   Finley metadata. It logs only plan/access categories, not secrets,
+   raw responses, or exact balances. The one-time branch merge can run
+   this same **read-only** audit automatically.
+2. If the API key reports an eligible **paid** plan and at least
+   one full audition's conservative credit allowance, run
+   `audition_one` with either `sawyer` or `finley`. This issues
+   exactly one bounded Flash v2.5 request with the existing original
+   sample, then checks the MP3 via ffprobe. The result stays in a
+   short-lived, unpublished Actions artifact. A disallowed free plan,
+   missing metadata, or missing credits stops before TTS.
+3. Listen to both recordings and check narrative character, city and
+   person names, technical acronyms, San Antonio and local weather
+   pronunciation. Human acceptance must be **explicit**, and a
+   publishing/commercial license must be confirmed *before* any
+   production transition. Passing technical audio checks is not
+   listening approval.
+
+**Production will remain Brian primary, Daniel backup** unless a
+separate, specifically approved future PR changes it. No credentials
+or production voices are rewritten by this feature.
+
+### Licensing and realistic credit capacity
+
+Current published monthly tiers (November 2026; confirm at checkout):
+
+- Free: $0, 10,000 credits; noncommercial audio with attribution.
+- Starter: $6, 30,000 credits; includes a commercial license.
+- Creator: $22, 121,000 credits.
+- Pro: $99, 600,000 credits.
+- Flash v2.5 API usage may cost around 0.5–1 credit per character,
+  depending on the plan/route. Treat 1 credit/character as a
+  conservative budget until the user account confirms actual use.
+- A 5–7-minute daily episode might use roughly 4,000–6,000
+  characters: 120,000–180,000 input characters across 30 days,
+  about 60,000–180,000 credits depending on the discount.
+  These are planning scenarios, **not** promises of exact prices or
+  enough credits. Starter is too small for that scenario, and
+  Creator is enough only in the lower-credit scenarios. Backups
+  and failed retries may consume additional credits.
+
+Sources: [ElevenLabs Default-voice retirement](
+https://elevenlabs.io/docs/help-center/product/voices/my-voices/what-are-default-voices),
+[ElevenLabs pricing](https://elevenlabs.io/pricing),
+[Voice Library API limitations](
+https://elevenlabs.io/docs/overview/capabilities/voices).
+
+The initial Research Desk changes and auditing code run offline tests
+before merging. An optional one-shot **unpublished** newsroom preview
+can validate actual generation without touching Releases, RSS or Pages.
+No paid upgrade, automatic library voice audition or production voice
+switch is performed.

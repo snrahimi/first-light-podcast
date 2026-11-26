@@ -398,6 +398,13 @@ BROADCAST EDITORIAL STRUCTURE (original, single-presenter newsroom voice):
   only when a today's exact publisher excerpt supports that change.
   Never say "yesterday brought progress" or "what changed" simply because
   the old and new headlines differ. If evidence is thin, omit a comparison.
+- When research_desk34 is attached, distinguish an exact publisher
+  excerpt from an issuing agency's own statement. The evidence establishes
+  WHAT WAS REPORTED, never independent proof that the claim is true.
+  Explain the lead's additional detail only if it exists in the attached
+  claims or official_issuer_excerpts. Treat attributed_possible_next_steps
+  as source claims, not forecasts or guaranteed outcomes. Do not copy
+  lengthy publisher phrasing verbatim.
 - For each of the two world leads: start with an informative, listener-
   facing development or question whose premise is supported by the evidence.
   Within two sentences identify who is reporting or asserting it. Then
@@ -486,7 +493,7 @@ def _check_section(script, minimum=100):
 
 def generated_script(now, edition, dossiers, weather_text, key, model,
                      post=requests.post, cache_dir=None, sleep=time.sleep,
-                     early_alert_text=""):
+                     early_alert_text="", research_cards=None):
     """Returns (script, metadata) or (None, explanation), two logical sections.
 
     Weather is appended from verified structured forecast fields, not a
@@ -506,6 +513,14 @@ def generated_script(now, edition, dossiers, weather_text, key, model,
     dossiers_material = research33.enrich_writer_material(
         dossiers, newsroom3.writer_material(dossiers)
     )
+    if research_cards is not None:
+        if __package__:
+            from . import research34
+        else:
+            import research34
+        dossiers_material = research34.attach_writer_research(
+            dossiers_material, research_cards
+        )
     info = plan(edition)
     world_material = _materials_for(dossiers_material, info["first"])
     rest_material = _materials_for(dossiers_material, info["second"])

@@ -69,6 +69,7 @@ def review_payload(edition, script, narrator=None, audio=None):
         "pronunciation_review": pronunciation.prepare(script)[1],
         "presentation_review": metrics["presentation_review"],
         "newsroom33": metrics.get("newsroom33", {}),
+        "research_desk34": metrics.get("research_desk34", {}),
         "episode_display_title": (
             edition.get("presentation33") or {}
         ).get("display_title"),

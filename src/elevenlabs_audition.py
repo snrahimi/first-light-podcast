@@ -174,7 +174,7 @@ def diagnose_access(api_key, voice_id, *, get=requests.get, announce=True):
     return result
 
 
-def request_sample(api_key, voice_id, *, post=requests.post):
+def request_sample(api_key, voice_id, *, post=requests.post, text=SAMPLE):
     """Exactly one API request. Fail closed on errors, quotas and audio issues.
 
     The request is limited by script length, contains no sensitive content,
@@ -184,7 +184,7 @@ def request_sample(api_key, voice_id, *, post=requests.post):
         raise RuntimeError("Both ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are required")
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}", voice_id):
         raise ValueError("ELEVENLABS_VOICE_ID has an invalid format")
-    payload = audition_payload()
+    payload = audition_payload(text)
     response = post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
         headers={
