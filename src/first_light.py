@@ -279,6 +279,12 @@ RSS_FEEDS = [
     ("world", "NPR World", "https://feeds.npr.org/1004/rss.xml"),
     ("world", "The Guardian World", "https://www.theguardian.com/world/rss"),
     ("world", "Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+    # Additional public-broadcaster and international desk coverage;
+    # only HTTPS headlines and bounded RSS descriptions are consumed.
+    ("world", "Deutsche Welle", "https://rss.dw.com/xml/rss-en-world"),
+    ("world", "France 24", "https://www.france24.com/en/rss"),
+    ("world", "ABC Australia", "https://www.abc.net.au/news/feed/104217382/rss.xml"),
+    ("world", "PBS News", "https://www.pbs.org/newshour/feeds/rss/headlines"),
     ("business", "BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
     ("business", "NPR Business", "https://feeds.npr.org/1006/rss.xml"),
     ("business", "Guardian Business", "https://www.theguardian.com/uk/business/rss"),
@@ -303,6 +309,10 @@ def _trusted_feed_link(publisher, url):
         "The Guardian": ("theguardian.com",),
         "Guardian": ("theguardian.com",),
         "Al Jazeera": ("aljazeera.com",),
+        "Deutsche Welle": ("dw.com",),
+        "France 24": ("france24.com",),
+        "ABC Australia": ("abc.net.au",),
+        "PBS News": ("pbs.org",),
     }
     allowed = next(
         (hosts for prefix, hosts in domains.items() if publisher.startswith(prefix)),
