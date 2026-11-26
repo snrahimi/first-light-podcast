@@ -40,6 +40,9 @@ official government governments minister ministers country countries
 leader leaders international global regional local meeting meetings
 security council committee report result source press new latest news
 world update updates plans says top major
+un united nations states eu european nato white house president
+police military department agency ministry court parliament congress
+imports exports economy markets
 """).split())
 INCOMPATIBLE_RATE = (
     frozenset(("raise", "raises", "hike", "hikes", "increases")),
