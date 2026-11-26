@@ -419,6 +419,11 @@ def script_numeric_gate(script, dossiers, weather, now):
             for document in dossier.get("official_context", []):
                 for excerpt in document.get("excerpts", []):
                     expected.update(NUMBER.findall(excerpt))
+            # Supplemental lead details are only present after their exact
+            # original-RSS strings passed validate_research(). These words
+            # are publisher claims, never independent fact-check results.
+            for detail in dossier.get("lead_feed_context", []):
+                expected.update(NUMBER.findall(detail["exact_excerpt"]))
     expected.update(_weather_numeric_tokens(weather))
     expected.update({str(now.year), str(now.day), "3.0", "5", "6", "7"})
     unexpected = sorted(set(NUMBER.findall(script)) - expected)
