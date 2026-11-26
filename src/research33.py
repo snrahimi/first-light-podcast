@@ -594,6 +594,20 @@ def validate_research(dossiers):
             for card in chapter for doc in card.get("official_context", [])
         ),
         "selected_story_related_feeds": related,
+        "event_link35": {
+            "trusted_candidates_examined": sum(
+                card.get("event_link35_review", {}).get(
+                    "trusted_candidates_examined", 0
+                ) for chapter in dossiers.values() for card in chapter
+            ),
+            "same_event_candidates": sum(
+                card.get("event_link35_review", {}).get(
+                    "same_event_candidates", 0
+                ) for chapter in dossiers.values() for card in chapter
+            ),
+            "added_source_reports": related,
+            "independent_corroboration_established": False,
+        },
         "lead_feed_context_sentences": sum(
             len(card.get("lead_feed_context", []))
             for chapter in dossiers.values() for card in chapter
@@ -642,6 +656,14 @@ def research_notes(dossiers, stats):
         f"Linked official pages inspected: {stats['official_documents_checked']}",
         f"Relevant source-feed reports added to chosen stories: "
         f"{stats['selected_story_related_feeds']}",
+        f"Trusted extra reports considered for same-event matching: "
+        f"{stats['event_link35']['trusted_candidates_examined']}",
+        f"Same-event candidates found: "
+        f"{stats['event_link35']['same_event_candidates']}",
+        f"Official issuer URLs eligible: {stats['official_eligible_urls']}; "
+        f"unavailable or unsuitable: {stats['official_urls_rejected_or_unavailable']}; "
+        f"skipped by bounded budget: {stats['official_urls_skipped_by_cap']}",
+        "Lexical same-event matching is not independent corroboration.",
         f"Additional complete lead-story RSS sentences: "
         f"{stats['lead_feed_context_sentences']}",
         "These are source-attributed RSS descriptions, not full verified reporting.",
