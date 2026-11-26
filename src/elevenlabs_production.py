@@ -20,7 +20,10 @@ import subprocess
 
 import requests
 
-from . import pronunciation
+if __package__:
+    from . import pronunciation
+else:
+    import pronunciation
 
 LOG = logging.getLogger("firstlight")
 URL = "https://api.elevenlabs.io/v1/text-to-speech/"
