@@ -7,6 +7,7 @@ world-section writer; this code merely separates it for ordering.
 from __future__ import annotations
 
 import re
+import base64
 
 PREVIEW_PATTERN = re.compile(
     r"^PREVIEW:\s*(?P<preview>.+?)\s+STORY:\s*(?P<story>.+)$",
@@ -124,3 +125,37 @@ def continuing_story_review(material):
         "source_grounded_change_verified": False,
         "basis": "headline history used as editorial cue; current reporting required",
     }
+
+
+RELEASE_TITLE_MARKER = "FIRST_LIGHT_EPISODE_TITLE_V1:"
+
+
+def title_release_marker(title):
+    """Embed a compact, versioned title in notes for later RSS assembly."""
+    cleaned = " ".join(str(title or "").split())[:155]
+    if not cleaned.startswith("First Light") or not cleaned:
+        raise ValueError("Episode display title is not a First Light title")
+    encoded = base64.urlsafe_b64encode(cleaned.encode("utf-8")).decode("ascii").rstrip("=")
+    return "<!-- " + RELEASE_TITLE_MARKER + encoded + " -->"
+
+
+def title_from_release_notes(body):
+    """Return a verified, bounded title or None for historical releases."""
+    match = re.search(
+        r"<!--\s*" + RELEASE_TITLE_MARKER + r"([A-Za-z0-9_-]{8,300})\s*-->",
+        str(body or ""),
+    )
+    if not match:
+        return None
+    encoded = match.group(1)
+    try:
+        value = base64.urlsafe_b64decode(
+            encoded + "=" * (-len(encoded) % 4)
+        ).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not value.startswith("First Light") or len(value) > 155 or any(
+        ord(character) < 32 for character in value
+    ):
+        return None
+    return value
