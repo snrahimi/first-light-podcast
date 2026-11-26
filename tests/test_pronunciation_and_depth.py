@@ -210,7 +210,7 @@ class LeadDetailTests(unittest.TestCase):
         dossiers = self.sample_dossiers()
         lead = dossiers["Top world headlines"][0]
         lead["sources"][0]["summary"] += (
-            " The agency scheduled 17 public hearings after the decision."
+            " The agency scheduled 17 public hearings after the decision was announced by officials."
         )
         research33.enrich_lead_feed_context(dossiers)
         research33.validate_research(dossiers)
