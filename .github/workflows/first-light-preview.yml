@@ -51,6 +51,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           FIRST_LIGHT_NARRATOR: elevenlabs
+          FIRST_LIGHT_SAN_ANTONIO_PRONUNCIATION: ${{ vars.FIRST_LIGHT_SAN_ANTONIO_PRONUNCIATION || 'guided' }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
           FEED_BASE_URL: ${{ vars.FEED_BASE_URL }}
         run: python -m src.first_light_preview
