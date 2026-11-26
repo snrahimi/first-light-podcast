@@ -14,10 +14,11 @@ from urllib.parse import urlsplit
 import requests
 
 if __package__:
-    from . import newsroom3, editorial
+    from . import newsroom3, editorial, research35
 else:
     import newsroom3
     import editorial
+    import research35
 
 LOG = logging.getLogger("firstlight.research33")
 MAX_DOCUMENTS = 4
@@ -239,28 +240,8 @@ def _trusted_feed_candidate(entry):
 
 
 def _topic_match_score(headline, candidate_title, candidate_summary=""):
-    """Conservative same-event signal; not factual corroboration.
-
-    High overlap is accepted. A second path handles shorter paraphrased
-    headlines only when a concrete event word and another subject token
-    overlap, plus supporting summary overlap. A country alone is never
-    sufficient to link different events.
-    """
-    lead = editorial.key_tokens(headline)
-    subject = editorial.key_tokens(candidate_title)
-    overlap = lead & subject
-    base = editorial.story_similarity(headline, candidate_title)
-    if len(overlap) >= 4 and base >= 0.65:
-        return base
-    event_overlap = overlap & editorial.IMPACT_WORDS
-    summary_tokens = editorial.key_tokens(candidate_summary) if candidate_summary else set()
-    shared_context = lead & summary_tokens
-    fraction = len(overlap) / max(1, min(len(lead), len(subject)))
-    if (len(overlap) >= 2 and event_overlap and fraction >= 0.35
-            and len(overlap | shared_context) >= 3
-            and (shared_context or len(overlap) >= 3)):
-        return min(0.85, 0.35 + 0.12 * len(overlap) + 0.05 * len(shared_context))
-    return 0.0
+    """Bounded same-event candidate score, never independent verification."""
+    return research35.match_score(headline, candidate_title, candidate_summary)
 
 
 def link_selected_feed_context(dossiers, groups):
@@ -284,6 +265,12 @@ def link_selected_feed_context(dossiers, groups):
         options = groups.get(category, []) if category else []
         for dossier in chapter:
             dossier["linked_feed_context_count"] = 0
+            dossier["event_link35_review"] = {
+                "trusted_candidates_examined": 0,
+                "same_event_candidates": 0,
+                "added_source_reports": 0,
+                "method": "event + two distinct subject anchors; no truth check",
+            }
             known = {src["url"] for src in dossier["sources"]}
             existing_publishers = {src["publisher"] for src in dossier["sources"]}
             matching = []
@@ -294,6 +281,7 @@ def link_selected_feed_context(dossiers, groups):
                     continue
                 if not _trusted_feed_candidate(candidate):
                     continue
+                dossier["event_link35_review"]["trusted_candidates_examined"] += 1
                 score = _topic_match_score(
                     dossier["headline"], title, candidate.get("summary", "")
                 )
@@ -301,6 +289,7 @@ def link_selected_feed_context(dossiers, groups):
                 # event. Match must include enough concrete event context.
                 if score <= 0:
                     continue
+                dossier["event_link35_review"]["same_event_candidates"] += 1
                 matching.append((score, candidate))
             matching.sort(
                 key=lambda hit: (
@@ -354,6 +343,7 @@ def link_selected_feed_context(dossiers, groups):
                 known.add(url)
                 existing_publishers.add(publisher)
                 dossier["linked_feed_context_count"] += 1
+                dossier["event_link35_review"]["added_source_reports"] += 1
                 attached += 1
             if dossier["linked_feed_context_count"]:
                 dossier["uncertainties"].append(
