@@ -394,6 +394,99 @@ def enrich_dossiers(dossiers, get=requests.get):
     return dossiers
 
 
+
+# More complete RSS descriptions are collected ONLY from already trusted
+# publisher feeds. This step uses no article pages, new network calls or
+# source metadata not already in the exact evidence ledger.
+MAX_LEAD_DETAIL_PER_STORY = 4
+MAX_LEAD_DETAIL_PER_PUBLISHER = 2
+MAX_LEAD_DETAIL_SENTENCE = 340
+MAX_LEAD_DETAIL_TOTAL = 980
+
+
+def _complete_rss_sentences(summary):
+    """Bounded, complete publisher-supplied RSS sentences; no clipped tails."""
+    text = newsroom3.clean(summary, 900)
+    if not text:
+        return []
+    # We accept only sentence-final punctuation, never silently complete
+    # truncated feed text or paraphrase third-party prose as a new source.
+    chunks = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9“\"'])", text)
+    return [
+        part.strip() for part in chunks
+        if part.strip().endswith((".", "!", "?"))
+        and 10 <= len(part.split()) <= 65
+        and len(part) <= MAX_LEAD_DETAIL_SENTENCE
+        and len(part) >= 65
+    ]
+
+
+def enrich_lead_feed_context(dossiers):
+    """Add complete, traceable *extra* RSS sentences for two world leads.
+
+    This does not retrieve publisher article bodies, claim corroboration,
+    or authorize invented background. Extra sentences must exist exactly
+    in an already attached publisher/official RSS source description.
+    """
+    for section, chapter in dossiers.items():
+        for dossier in chapter:
+            dossier["lead_feed_context"] = []
+            if section != "Top world headlines":
+                continue
+            already = [str(c.get("evidence") or "").lower()
+                       for c in dossier.get("claim_ledger", [])]
+            used = set()
+            by_publisher = {}
+            total = 0
+            for source in dossier["sources"]:
+                if len(dossier["lead_feed_context"]) >= MAX_LEAD_DETAIL_PER_STORY:
+                    break
+                publisher = str(source.get("publisher", ""))
+                if by_publisher.get(publisher, 0) >= MAX_LEAD_DETAIL_PER_PUBLISHER:
+                    continue
+                if not _trusted_feed_candidate({
+                    "publisher": publisher,
+                    "url": source["url"],
+                    "provenance": ("primary_official_catalog"
+                                   if source.get("primary") else "publisher_rss"),
+                }):
+                    continue
+                for sentence in _complete_rss_sentences(source.get("summary")):
+                    if (len(dossier["lead_feed_context"]) >= MAX_LEAD_DETAIL_PER_STORY
+                            or by_publisher.get(publisher, 0) >= MAX_LEAD_DETAIL_PER_PUBLISHER
+                            or total + len(sentence) > MAX_LEAD_DETAIL_TOTAL):
+                        break
+                    low = sentence.casefold()
+                    if low in used or any(low in excerpt for excerpt in already):
+                        continue
+                    # Compare only genuine substantive content, not whether
+                    # source spelling resembles the selected headline.
+                    significant = editorial.key_tokens(sentence)
+                    if significant and any(
+                        len(significant & editorial.key_tokens(prev)) /
+                        max(1, len(significant | editorial.key_tokens(prev))) > .84
+                        for prev in used
+                    ):
+                        continue
+                    dossier["lead_feed_context"].append({
+                        "publisher": publisher,
+                        "url": source["url"],
+                        "exact_excerpt": sentence,
+                        "source_type": "trusted_rss_description",
+                        "status": "publisher_report_not_independent_verification",
+                    })
+                    used.add(low)
+                    by_publisher[publisher] = by_publisher.get(publisher, 0) + 1
+                    total += len(sentence)
+            if dossier["lead_feed_context"]:
+                dossier["uncertainties"].append(
+                    "Additional complete RSS sentences are attributed "
+                    "publisher descriptions, not independently verified facts."
+                )
+    return sum(len(card["lead_feed_context"])
+               for chapter in dossiers.values() for card in chapter)
+
+
 def validate_research(dossiers):
     """Check document provenance and exact extraction without pretending truth."""
     validated = 0
@@ -406,6 +499,28 @@ def validate_research(dossiers):
             comparison = dossier.get("reporting_comparison", {})
             if comparison.get("independent_reporting_established") is not False:
                 raise ValueError("Research may not assert independently verified reporting")
+            for detail in dossier.get("lead_feed_context", []):
+                source = next((
+                    src for src in dossier["sources"]
+                    if src["url"] == detail.get("url")
+                    and src["publisher"] == detail.get("publisher")
+                ), None)
+                exact = detail.get("exact_excerpt")
+                if (source is None or not isinstance(exact, str)
+                        or exact not in newsroom3.clean(source.get("summary"), 900)
+                        or exact not in _complete_rss_sentences(source.get("summary"))
+                        or detail.get("source_type") != "trusted_rss_description"
+                        or detail.get("status") !=
+                           "publisher_report_not_independent_verification"
+                        or not _trusted_feed_candidate({
+                            "publisher": source["publisher"], "url": source["url"],
+                            "provenance": ("primary_release_feed"
+                                           if source.get("primary") else "publisher_rss"),
+                        })):
+                    raise ValueError(
+                        "Additional lead detail is not exactly traceable "
+                        "to trusted publisher feed source metadata"
+                    )
             for doc in dossier.get("official_context", []):
                 if not _issuer_matches(doc["url"], doc["publisher"]):
                     raise ValueError("Official document domain/issuer mismatch")
@@ -433,6 +548,11 @@ def validate_research(dossiers):
             for card in chapter for doc in card.get("official_context", [])
         ),
         "selected_story_related_feeds": related,
+        "lead_feed_context_sentences": sum(
+            len(card.get("lead_feed_context", []))
+            for chapter in dossiers.values() for card in chapter
+        ),
+        "lead_feed_context_method": "verbatim complete trusted RSS descriptions, no article scraping",
         "independent_fact_checks": 0,
         "comparison": "publisher-excerpt comparison only; numbers require review",
     }
@@ -443,6 +563,15 @@ def enrich_writer_material(dossiers, existing):
     for section, chapter in dossiers.items():
         for idx, dossier in enumerate(chapter):
             writer = existing[section][idx]
+            writer["feed_detail_context"] = [
+                {
+                    "publisher": detail["publisher"],
+                    "url": detail["url"],
+                    "exact_excerpt": detail["exact_excerpt"],
+                    "status": "publisher_claim_not_independently_verified",
+                }
+                for detail in dossier.get("lead_feed_context", [])
+            ]
             writer["official_context"] = [
                 {
                     "agency": doc["publisher"], "url": doc["url"],
@@ -467,10 +596,18 @@ def research_notes(dossiers, stats):
         f"Linked official pages inspected: {stats['official_documents_checked']}",
         f"Relevant source-feed reports added to chosen stories: "
         f"{stats['selected_story_related_feeds']}",
+        f"Additional complete lead-story RSS sentences: "
+        f"{stats['lead_feed_context_sentences']}",
+        "These are source-attributed RSS descriptions, not full verified reporting.",
         "No independently verified factual claims are implied.",
     ]
     for category, chapter in dossiers.items():
         for dossier in chapter:
+            for detail in dossier.get("lead_feed_context", []):
+                lines.append(
+                    f"{category} extra RSS context: {detail['publisher']} | "
+                    f"{detail['url']} | {detail['exact_excerpt']}"
+                )
             for doc in dossier.get("official_context", []):
                 lines.extend([
                     f"{category}: {dossier['headline']}",
