@@ -830,6 +830,12 @@ def news_and_script(_client, now, weather):
             script = editorial.speaking_text(fallback_readout(now, edition, weather, dossiers))
             mode = "source-attributed RSS fallback"
             draft_stats["reason"] = "editorial_or_evidence_gate"
+            # Discard preview success from the REJECTED Gemini draft. The
+            # source-attributed fallback contains no structured AI teaser.
+            draft_stats["cold_open"] = {
+                "mode": "rejected_draft_used_source_fallback",
+                "preview_words": 0,
+            }
     if mode != "Gemini segmented evidence-led 3.2":
         quality = {
             "script_words": len(script.split()),

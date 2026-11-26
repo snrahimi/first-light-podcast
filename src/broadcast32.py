@@ -446,6 +446,13 @@ STRICT SOURCE BOUNDARIES:
   release is a statement by the agency, not proof from another source.
 - Do NOT invent quotes, dates, numerical figures, market values, causes,
   impacts, motives, forecasts, implications, event outcomes or named actors.
+- NUMBERS: Only write a numeric figure if that exact number is present in
+  today's supplied source excerpts or issuer text. Never add reported
+  quantities together (for example, do not turn "12 other partners" into
+  an inferred number of total partners). Never calculate percentages,
+  elapsed durations, casualty totals, dates, ages or estimates from
+  adjacent claims. If a number is missing or ambiguous, omit it; the
+  script will be checked against the exact numeral evidence ledger.
 - Explain why something matters only when a source excerpt supports it.
 - Never repeat text to meet the word target or disclose invented reporting.
 - Paraphrase attributed findings in original narration: do not quote
