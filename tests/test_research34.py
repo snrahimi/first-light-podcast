@@ -69,7 +69,11 @@ class Desk34Tests(unittest.TestCase):
                 "provenance": "publisher_rss",
             }))
             self.assertFalse(first_light._trusted_feed_link(
-                name, link.replace("https://www.", "https://fake.")
+                name, link.replace(
+                    "://www.", "://www."
+                ).replace("/en/", ".evil.example/en/")
+                .replace("/news/", ".evil.example/news/")
+                .replace("/newshour/", ".evil.example/newshour/")
             ))
 
     def test_coverage_reports_source_diversity_not_truth(self):
