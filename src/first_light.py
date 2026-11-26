@@ -27,7 +27,7 @@ import calendar
 import feedparser
 # Support both "python -m src.first_light" and direct script execution.
 if __package__:
-    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production, transcript_display, editorial33
+    from . import editorial, newsroom3, research33, broadcast32, quality2plus, monitor2plus, elevenlabs_production, transcript_display, editorial33, research34
 else:
     import editorial
     import newsroom3
@@ -38,6 +38,7 @@ else:
     import elevenlabs_production
     import transcript_display
     import editorial33
+    import research34
 import base64
 import io
 import wave
@@ -793,6 +794,8 @@ def news_and_script(_client, now, weather):
     research33.enrich_dossiers(dossiers)
     research33.enrich_lead_feed_context(dossiers)
     research_metrics = research33.validate_research(dossiers)
+    research_cards = research34.lead_research_cards(dossiers)
+    coverage = research34.source_coverage(groups)
     # Two source-partitioned drafts, rather than one oversized prompt
     # and another paid/limited call merely asking for extra words.
     script, draft_stats = broadcast32.generated_script(
@@ -800,6 +803,7 @@ def news_and_script(_client, now, weather):
         os.getenv("GEMINI_API_KEY", "").strip(),
         os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         early_alert_text=early_weather_alert_intro(weather),
+        research_cards=research_cards,
     )
     mode = "Gemini segmented evidence-led 3.2" if script else "source-attributed RSS fallback"
     if script is None:
@@ -813,6 +817,11 @@ def news_and_script(_client, now, weather):
         try:
             quality = broadcast32.quality(script, edition, now)
             newsroom3.script_numeric_gate(script, dossiers, weather, now)
+            preview_review = research34.editorial_review(
+                script, research_cards, coverage, draft_stats
+            )
+            if preview_review["hard_reject_reason"]:
+                raise ValueError("Research Desk rejected fabricated fieldwork")
         except ValueError as exc:
             LOG.warning(
                 "Gemini script failed editorial/evidence acceptance (%s); "
@@ -835,6 +844,13 @@ def news_and_script(_client, now, weather):
     quality["presentation_review"] = broadcast32.presentation_review(
         script, edition
     )
+    quality["research_desk34"] = {
+        "coverage": coverage,
+        "lead_cards": research_cards,
+        "review": research34.editorial_review(
+            script, research_cards, coverage, draft_stats
+        ),
+    }
     quality["newsroom33"] = {
         "cold_open": draft_stats.get("cold_open", {
             "mode": "unavailable_source_fallback", "preview_words": 0
@@ -859,6 +875,11 @@ def news_and_script(_client, now, weather):
         dossiers, evidence_metrics, leads
     )
     edition["newsroom3_audit"]["phase33_research"] = research_metrics
+    edition["newsroom3_audit"]["research_desk34"] = {
+        "coverage": coverage,
+        "lead_cards": research_cards,
+        "review": quality["research_desk34"]["review"],
+    }
     quality_report = quality2plus.scorecard(
         script, dossiers, edition, weather, mode
     )
@@ -885,6 +906,9 @@ def news_and_script(_client, now, weather):
         + newsroom3.audit_notes(dossiers, evidence_metrics)
         + "\n\n" + research33.research_notes(dossiers, research_metrics)
         + "\n\n" + quality2plus.public_notes(quality_report)
+        + "\n\n" + research34.public_notes(
+            coverage, research_cards, quality["research_desk34"]["review"]
+        )
     )
     return notes, editorial.edition_sources(edition), script, edition
 
@@ -1676,6 +1700,8 @@ def main():
                 "preflight_shortfall_words": edition["script_quality"]["duration_preflight"]["shortfall_words"],
                 "quality_scorecard": edition["quality_scorecard"],
                 "presentation_review": edition["script_quality"]["presentation_review"],
+                "research_desk34": edition["script_quality"]["research_desk34"]["review"],
+                "source_coverage34": edition["script_quality"]["research_desk34"]["coverage"],
                 "newsroom33": edition["script_quality"]["newsroom33"],
                 "lead_explainer_ready": edition["lead_explainer_ready"],
                 "lead_story_count": edition["lead_story_count"],
