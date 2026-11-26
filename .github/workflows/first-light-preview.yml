@@ -20,7 +20,7 @@ concurrency:
 jobs:
   preview:
     name: Source-grounded editorial and Brian audio preview
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'START FIRST LIGHT EDITORIAL PREVIEW (ONE SHOT)') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'START FIRST LIGHT EDITORIAL PREVIEW (ONE SHOT)') || contains(github.event.head_commit.message, 'START FIRST LIGHT NEWSROOM 3.3 PREVIEW (ONE SHOT)') }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
 
