@@ -20,6 +20,11 @@ import subprocess
 
 import requests
 
+if __package__:
+    from . import pronunciation
+else:
+    import pronunciation
+
 LOG = logging.getLogger("firstlight")
 URL = "https://api.elevenlabs.io/v1/text-to-speech/"
 SUBSCRIPTION_URL = "https://api.elevenlabs.io/v1/user/subscription"
@@ -74,10 +79,10 @@ DELIVERY_PAUSES = (
 
 
 def delivery_text(spoken_script):
-    """Add restrained prosodic pauses without changing any spoken words.
+    """Prepare reviewed pronunciations and restrained topic pauses for TTS.
 
-    Reversing the inserted tags and collapsing whitespace must produce
-    the exact approved transcript text. All tags count toward API budget.
+    Only the speech request changes. The published source-grounded text
+    remains exactly as drafted. Added aliases/tags count toward credits.
     """
     if not isinstance(spoken_script, str):
         raise NarratorFailure("narration script is not text")
@@ -85,7 +90,7 @@ def delivery_text(spoken_script):
     # that might be interpreted as instructions by the voice engine.
     if re.search(r"<\s*/?\s*break\b", spoken_script, re.I):
         raise NarratorFailure("untrusted speech markup in narration script")
-    result = spoken_script
+    result, _pronunciation_review = pronunciation.prepare(spoken_script)
     for marker, seconds in DELIVERY_PAUSES:
         boundary = re.compile(
             r"(?<=[.!?])\s+(?=" + re.escape(marker) + r")",

@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 import sys
 
-from . import first_light, elevenlabs_production, transcript_display
+from . import first_light, elevenlabs_production, transcript_display, pronunciation
 
 LOG = logging.getLogger("firstlight.preview")
 PREVIEW_DIR = Path("preview-review")
@@ -66,6 +66,7 @@ def review_payload(edition, script, narrator=None, audio=None):
         "tts_prepared_characters": len(
             elevenlabs_production.delivery_text(script)
         ),
+        "pronunciation_review": pronunciation.prepare(script)[1],
         "presentation_review": metrics["presentation_review"],
         "lead_story_count": edition.get("lead_story_count"),
         "lead_explainer_ready": edition.get("lead_explainer_ready"),

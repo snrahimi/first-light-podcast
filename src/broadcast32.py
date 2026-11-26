@@ -75,6 +75,7 @@ def _editorial_beat_plan(material):
                 for ev in card.get("evidence", []) if ev.get("text")
             }
             official = card.get("official_context", [])
+            extra_rss = card.get("feed_detail_context", [])
             is_lead = section == "Top world headlines"
             # Two RSS headlines do not justify a full five-minute report.
             # Prefer meaningful source detail: distinct summaries and
@@ -92,13 +93,14 @@ def _editorial_beat_plan(material):
             # Richness is not determined by word volume alone. Short
             # article snippets, especially truncated RSS descriptions,
             # are not a license to write invented background.
-            explainable = complete_excerpts >= 2 or bool(official)
+            explainable = complete_excerpts + len(extra_rss) >= 2 or bool(official)
             budget = min(
                 220 if is_lead else 160,
                 (65 if is_lead else 42)
                 + min(6, len(distinct)) * (16 if is_lead else 12)
                 + min(4, len(official)) * 24
-                + min(4, complete_excerpts) * 13,
+                + min(4, complete_excerpts) * 13
+                + min(4, len(extra_rss)) * 18,
             )
             if is_lead and not explainable:
                 budget = min(120, budget)
@@ -110,6 +112,7 @@ def _editorial_beat_plan(material):
                 "official_agency_excerpt_count": len(official),
                 "substantive_source_excerpts": long_excerpts,
                 "complete_source_excerpts": complete_excerpts,
+                "additional_complete_rss_sentences": len(extra_rss),
                 "story_role": "world_lead" if is_lead else "short_report",
                 "narrative_depth": (
                     "supported_explainer" if explainable else "brief_only"
@@ -379,6 +382,10 @@ BROADCAST EDITORIAL STRUCTURE (original, single-presenter newsroom voice):
   remains unknown. Do not manufacture an answer to a rhetorical question.
 - Give a story room only when substantive excerpts actually support depth.
   A bare headline is a short brief, not a manufactured background analysis.
+- Where feed_detail_context provides additional complete RSS sentences for
+  a lead, explain the DISTINCT sourced details, never duplicate the headline.
+  Those sentences are attributed publisher descriptions, not independent
+  full-article verification or proof of the underlying claims.
 - Use smooth, specific transitions, but NEVER claim an invented causal
   connection between adjacent events. No filler or recurring generic
   "In its summary, [publisher] adds" constructions.

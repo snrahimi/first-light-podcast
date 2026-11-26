@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "written": "Kyiv",
+      "spoken": "Keev",
+      "category": "city",
+      "note": "Standard English-language Ukrainian capital pronunciation. Review actual Brian audio."
+    },
+    {
+      "written": "Cartagena",
+      "spoken": "Car-ta-HEN-ah",
+      "category": "city",
+      "note": "Spanish place name; preview voice output before relying on this alias."
+    }
+  ]
+}
