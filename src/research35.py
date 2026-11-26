@@ -7,8 +7,6 @@ eligible for attachment; this function never fetches any content.
 """
 from __future__ import annotations
 
-from difflib import SequenceMatcher
-
 if __package__:
     from . import editorial
 else:
@@ -118,6 +116,6 @@ def review_match(lead_title, other_title, other_summary=""):
     return {
         "same_event_candidate": score > 0,
         "lexical_confidence": score,
-        "independently_corrobated": False,
+        "independent_corroboration_established": False,
         "method": "event and multiple non-generic subject anchors",
     }
